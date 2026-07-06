@@ -128,6 +128,15 @@ make dev-shell      # interactive VM shell
 make dev-logs       # tail all container logs
 ```
 
+### Testing
+
+```bash
+make test           # Run tests on the host (unit + integration + smoke)
+make dev-test       # Run full suite inside the container (requires dev stack)
+```
+
+Unit tests work anywhere. Integration tests require running services. Smoke tests auto-skip if the full stack isn't available.
+
 ### Other VM providers
 
 The same Makefile supports production VMs and other hypervisors via SSH:
