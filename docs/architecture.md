@@ -263,12 +263,64 @@ Core entities:
 * User
 * Project
 * Membership
-* Dataset
+* DataResource — institutional asset available for analysis (not owned by EpiBridge)
+* ResourceProvider — validates resource endpoints and describes runtime requirements
 * Job
 * JobFile
 * Output
 * Approval
 * AuditLog
+
+⸻
+
+## Data Resources
+
+EpiBridge does not own, store, or manage scientific data.
+
+A **Data Resource** represents an existing institutional data asset that has been
+registered for analysis. The institution owns and manages the underlying data;
+EpiBridge provides a catalogue of available resources, access control, and secure
+execution.
+
+### Resource Providers
+
+A **Resource Provider** is an abstraction that knows how to make a particular type
+of data resource available for analysis. Implementations include:
+
+* **CsvProvider** — a CSV file available at a known path
+* **DuckDBProvider** — a DuckDB database
+* **PostgresProvider** — a PostgreSQL database
+* **ExcelProvider** — an Excel workbook
+* **ParquetProvider** — a directory of Parquet files
+
+The provider has two responsibilities:
+
+1. **`validate_endpoint(endpoint)`** — is the endpoint configuration well-formed?
+2. **`prepare_runtime(endpoint)`** — what mount points and environment variables are
+   needed to expose this resource inside an analysis container?
+
+Providers describe runtime requirements in platform-agnostic terms (`Mount`,
+`RuntimeConfig`). An Executor (Docker, Kubernetes, Slurm, etc.) translates these into
+the corresponding infrastructure.
+
+### Runtime Contract
+
+EpiBridge never knows the physical host path of data resources. The deployment
+environment guarantees that configured resources are reachable at:
+
+```
+/read-only-data
+```
+
+How resources arrive there (host directory mount, NFS, cloud storage, database
+connection) is entirely the deployment's responsibility.
+
+### Project Association
+
+A **Project** represents permission to analyse one or more Data Resources.
+Projects do not own resources — they reference them through a many-to-many
+relationship (`ProjectDataResource`). A single Data Resource may be associated
+with multiple projects over time.
 
 ⸻
 
@@ -330,13 +382,16 @@ Audit logs should be immutable.
 ⸻
 ## Storage
 
-Create a storage abstraction.
+Create a storage abstraction for *job files and outputs*.
 
 storage.save()
 storage.load()
 storage.delete()
 
-Initially backed by the local filesystem.
+Data resources are never ingested or stored by EpiBridge — they remain under
+institutional control and are exposed through the runtime contract (/read-only-data).
+
+The storage abstraction is initially backed by the local filesystem.
 
 Later replace with:
 
@@ -438,7 +493,7 @@ Only approved outputs are returned.
 
 ⸻
 
-# Design Principles
+# Architectural Principles
 
 1. Move computation to the data.
 2. Never expose database access.
@@ -451,6 +506,21 @@ Only approved outputs are returned.
 9. Modular services.
 10. Reproducible execution.
 
+## Domain Principles
+
+11. **Data Resource** = institutional asset; **Project** = permission to analyse
+    one or more institutional assets.
+12. No Docker references in the provider layer — the provider describes runtime
+    requirements in platform-agnostic terms; the executor implements them.
+13. `/read-only-data` is the runtime contract; the application never knows host paths.
+14. `endpoint` defines how the runtime reaches the resource, not generic configuration.
+15. `validate_endpoint()` validates the endpoint definition; `prepare_runtime()`
+    describes execution requirements.
+16. The deployment owns physical storage; EpiBridge owns the catalogue and execution
+    model.
+17. The application must never assume where underlying data physically resides — it
+    only understands Data Resources, Resource Providers, and Runtime Endpoints.
+
 ⸻
 # MVP Scope
 
@@ -458,6 +528,9 @@ Only approved outputs are returned.
 * Database
 * User management
 * Projects
+
+* Data Resource model
+* Resource Provider abstraction
 
 * Job submission
 * Dashboard

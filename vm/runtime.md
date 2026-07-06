@@ -27,7 +27,7 @@
 /opt/epibridge              # application repository
 /var/lib/epibridge/data     # persistent database volume
 /var/lib/epibridge/outputs  # job output storage
-/var/lib/epibridge/datasets # sensitive dataset mounts
+/var/lib/epibridge/data     # runtime data resources mount
 /var/log/epibridge          # audit and application logs
 ```
 
@@ -41,6 +41,40 @@ Only these must be installed on the host:
 - curl
 
 Everything else runs in containers. The host never runs Python, Node.js, or PostgreSQL directly.
+
+## Runtime Contract — Data Resources
+
+The deployment environment guarantees that institutional data resources are available beneath:
+
+```
+/read-only-data
+```
+
+EpiBridge never knows the physical host path. How resources arrive at `/read-only-data`
+(host directory mount, NFS share, cloud storage, database connection, etc.) is entirely the
+responsibility of the deployment.
+
+EpiBridge only understands:
+
+- **Data Resources** — registered metadata about an available asset
+- **Resource Providers** — abstractions that validate endpoints and describe runtime requirements
+- **Runtime Endpoints** — provider-specific configuration (e.g. `{"path": "study123/data.csv"}`)
+
+The `ResourceProvider` translates these into platform-agnostic mount and environment
+requirements. The Executor translates those into container mounts, network configuration, etc.
+
+This allows the same application to operate against local files, network filesystems, databases,
+or cloud storage without changing application code.
+
+### Development
+
+In development, `docker-compose.yml` mounts `./examples/resources/` at `/read-only-data`.
+This exercises the exact same provider abstraction used in production.
+
+### Production
+
+In production, the system administrator ensures the institution's data resources are placed
+at `/read-only-data` or otherwise reachable through the configured provider endpoints.
 
 ## Standard Ports
 
