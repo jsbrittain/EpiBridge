@@ -82,7 +82,7 @@ services:
       # The worker runs in a container, so provider mount sources
       # like /read-only-data/* are not visible to Docker Engine
       # on the host. HOST_DATA_ROOT provides the host-side equivalent.
-      HOST_DATA_ROOT: /opt/epibridge/examples/resources
+      HOST_DATA_ROOT: ${HOST_DATA_ROOT:-/opt/epibridge/examples/resources}
       # Persistent output store — writes imported execution artefacts
       # to the same volume the backend reads from.
       OUTPUT_DIR: /outputs

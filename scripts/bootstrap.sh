@@ -41,7 +41,22 @@ with open(path, 'w') as f:
 fi
 
 ###############################################################################
-# 2. Build Docker images
+# 2. Set HOST_DATA_ROOT for Docker-outside-of-Docker bind mounts
+#
+# The worker runs in a container, so provider mount sources like
+# /read-only-data/* are not visible to Docker Engine on the host.
+# This variable remaps them to the host-visible path.
+#
+# Derive from the bootstrap script location so it works in development
+# (OrbStack VM at /opt/epibridge), CI (GitHub workspace), and any
+# future deployment context. Can be overridden via environment.
+###############################################################################
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export HOST_DATA_ROOT="${HOST_DATA_ROOT:-${REPO_ROOT}/examples/resources}"
+
+###############################################################################
+# 3. Build Docker images
 ###############################################################################
 echo "Building application images..."
 docker compose build
@@ -50,13 +65,13 @@ echo "Building analysis container image..."
 docker build -t epibridge/python-3.13-scientific:latest containers/python-3.13-scientific/
 
 ###############################################################################
-# 3. Start services
+# 4. Start services
 ###############################################################################
 echo "Starting services..."
 docker compose up -d
 
 ###############################################################################
-# 4. Wait for PostgreSQL
+# 5. Wait for PostgreSQL
 ###############################################################################
 echo "Waiting for PostgreSQL..."
 until docker compose exec -T postgres pg_isready -U epibridge 2>/dev/null; do
@@ -65,19 +80,19 @@ done
 echo "PostgreSQL is ready."
 
 ###############################################################################
-# 5. Seed admin account
+# 6. Seed admin account
 ###############################################################################
 echo "Seeding administrator account..."
 docker compose exec -T backend python -m app.cli seed-admin
 
 ###############################################################################
-# 6. Seed demo workspace
+# 7. Seed demo workspace
 ###############################################################################
 echo "Seeding demo workspace..."
 docker compose exec -T backend python -m app.cli seed-demo
 
 ###############################################################################
-# 7. Health check
+# 8. Health check
 ###############################################################################
 echo "Running health checks..."
 ./scripts/healthcheck.sh
