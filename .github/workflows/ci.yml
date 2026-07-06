@@ -41,7 +41,8 @@ jobs:
     - name: Run golden path e2e test
       run: |
         cd frontend
-        npx playwright install chromium
+        npm ci
+        npx playwright install --with-deps chromium
         npx playwright test
 
     - name: Collect logs on failure
