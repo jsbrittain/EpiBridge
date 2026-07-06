@@ -264,6 +264,7 @@ Core entities:
 * Project
 * Membership
 * DataResource — institutional asset available for analysis (not owned by EpiBridge)
+* AnalysisBundle — researcher-created artefact describing an analysis and its requirements
 * ResourceProvider — validates resource endpoints and describes runtime requirements
 * Job
 * JobFile
@@ -377,6 +378,80 @@ with multiple projects over time.
 
 ⸻
 
+## Analysis Bundles
+
+An **Analysis Bundle** is a researcher-created artefact that describes an
+analysis and its requirements. Researchers do not submit arbitrary scripts
+to the platform — they submit Analysis Bundles. The bundle captures:
+
+* the analysis metadata (name, version, description)
+* the required runtime environment (e.g. `python-3.13`, `r-4.5`)
+* the entry point script
+* the Data Resources the analysis expects (declared by institutional identifier)
+* the expected outputs
+* optional configuration parameters (thresholds, model options, etc.)
+
+The bundle is a **researcher artefact**, not an infrastructure asset. It is
+created within a Project and owned by the researcher who created it.
+
+### Bundle Model
+
+```
+AnalysisBundle
+├── id              (UUID, auto-generated)
+├── project_id      (FK → Project)
+├── created_by_id   (FK → User)
+├── name
+├── runtime         ("python-3.13", "r-4.5", "julia-1.11")
+├── version
+├── entrypoint
+├── description
+├── outputs         (JSON list of expected paths)
+├── parameters      (JSON, reserved for future use)
+├── created_at
+└── updated_at
+```
+
+### Relationship to Data Resources
+
+A bundle declares which Data Resources it expects through a many-to-many
+join table:
+
+```
+AnalysisBundle
+    ↓
+AnalysisBundleDataResource
+    ↓
+DataResource
+```
+
+The bundle references Data Resources by their institutional `identifier`.
+At bundle creation time, the service validates that all declared resources
+exist in the system. This gives referential integrity and provides a natural
+place to extend access permissions in the future.
+
+### Relationship to future Jobs
+
+Jobs (next milestone) will bind an Analysis Bundle to a specific execution
+request against authorised Data Resources. The relationship will be:
+
+```
+Project
+    ↓
+AnalysisBundle        DataResource
+    ↓                       ↓
+    └── Job ────────────────┘
+          ↓
+        Execution
+          ↓
+        Outputs
+```
+
+The bundle provides the executable description; the Job provides the
+execution context (which resources, which parameters, which user).
+
+⸻
+
 ## Runtime Architecture
 
 The system consists of three distinct environments.
@@ -479,20 +554,6 @@ The analysis receives references through well-known environment variables
 (such as `PGHOST`, `PGDATABASE`) or through the file paths under `/data/{alias}`.
 
 ⸻
-
-## Analysis Submission
-
-Researchers should submit an analysis bundle rather than arbitrary scripts.
-
-Example:
-
-analysis.zip
-manifest.yaml
-run.py
-requirements.txt
-README.md
-
-This improves reproducibility.
 
 ⸻
 
@@ -660,6 +721,7 @@ Only approved outputs are returned.
 7. The runtime contract is `/read-only-data`, `/work`, `/data`, and `/output`.
 8. Analysis containers receive only authorised resources.
 9. Analyses use standard language interfaces rather than an EpiBridge SDK.
+10. Analysis Bundles are researcher artefacts, not infrastructure. They are created within Projects and owned by their authors.
 
 ⸻
 # MVP Scope

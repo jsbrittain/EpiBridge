@@ -32,6 +32,12 @@ The backend validates the token and maps it to an internal user.
 * List outputs
 * Download approved outputs
 
+### Analysis Bundles
+
+* `POST /projects/{project_id}/bundles` — create a bundle within a project
+* `GET /admin/bundles` — list all bundles (admin)
+* `GET /admin/bundles/{id}` — get bundle details (admin)
+
 ### Administration
 
 * Pending jobs

@@ -10,6 +10,7 @@ const links = [
   { href: "/jobs", label: "Jobs" },
   { href: "/outputs", label: "Outputs" },
   { href: "/admin", label: "Admin" },
+  { href: "/admin/bundles", label: "Bundles" },
 ];
 
 export default function Sidebar() {

@@ -21,6 +21,47 @@ export interface ProjectCreate {
   description?: string;
 }
 
+export interface DataResource {
+  id: string;
+  identifier: string;
+  name: string;
+  alias: string;
+  description: string;
+  provider_type: string;
+  endpoint: Record<string, unknown>;
+  version: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalysisBundle {
+  id: string;
+  project_id: string;
+  created_by_id: string;
+  name: string;
+  runtime: string;
+  version: string;
+  entrypoint: string;
+  description: string;
+  resource_identifiers: string[];
+  outputs: string[];
+  parameters: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalysisBundleCreate {
+  name: string;
+  runtime: string;
+  version: string;
+  entrypoint: string;
+  description?: string;
+  resource_identifiers?: string[];
+  outputs?: string[];
+  parameters?: Record<string, unknown>;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -47,26 +88,30 @@ export function createProject(data: ProjectCreate): Promise<Project> {
   });
 }
 
-export interface DataResource {
-  id: string;
-  identifier: string;
-  name: string;
-  alias: string;
-  description: string;
-  provider_type: string;
-  endpoint: Record<string, unknown>;
-  version: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export async function getAdminResources(): Promise<DataResource[]> {
   return request<DataResource[]>("/api/admin/resources");
 }
 
 export async function getAdminResource(id: string): Promise<DataResource> {
   return request<DataResource>(`/api/admin/resources/${id}`);
+}
+
+export async function getAdminBundles(): Promise<AnalysisBundle[]> {
+  return request<AnalysisBundle[]>("/api/admin/bundles");
+}
+
+export async function getAdminBundle(id: string): Promise<AnalysisBundle> {
+  return request<AnalysisBundle>(`/api/admin/bundles/${id}`);
+}
+
+export async function createProjectBundle(
+  projectId: string,
+  data: AnalysisBundleCreate,
+): Promise<AnalysisBundle> {
+  return request<AnalysisBundle>(`/api/projects/${projectId}/bundles`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export interface DashboardStats {
