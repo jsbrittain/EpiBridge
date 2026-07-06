@@ -28,6 +28,9 @@ jobs:
         cd backend
         python -m pytest tests/unit -v --cov=app --cov-report=term-missing
 
+    - name: Prepare environment
+      run: cp .env.example .env
+
     - name: Validate Docker Compose
       run: docker compose config
 
