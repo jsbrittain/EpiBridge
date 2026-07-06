@@ -81,7 +81,7 @@ Once the core schema stabilises, Alembic will be reintroduced as a dedicated mil
 The standard development workflow:
 
 ```bash
-make dev          # bootstrap the full stack
+make dev          # bootstrap the full stack (OrbStack VM)
 # During development
 make format       # auto-format code
 make lint         # static analysis
@@ -122,6 +122,16 @@ make test         # run tests
 - `python -m pytest backend/tests/unit -v` — unit tests only
 - `python -m pytest backend/tests/integration -v` — integration tests (requires DB + Redis running)
 - `python -m pytest backend/tests/smoke -v` — smoke tests (requires full stack running)
+
+**CI** (from repo root, requires Docker):
+- `make ci` — bootstrap full stack (build, start, seed), same as `make bootstrap`
+- `make ci-clean` — tear down all Docker resources and remove `.env`
+- `make playwright` — run golden-path e2e test (must be run after `make ci`)
+
+**Shared bootstrap** (from repo root, requires Docker):
+- `make bootstrap` — idempotent bootstrap used by both development and CI.
+  Generates `.env` if missing, builds images, starts services, seeds admin
+  and demo workspace. Safe to run multiple times.
 
 **Makefile dev targets** (OrbStack-specific, uses `scripts/orbstack.sh` under the hood):
 - `make dev` — one-command: create VM, mount repo, install, start, verify
