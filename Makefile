@@ -2,8 +2,9 @@ VM_HOST ?= epibridge.local
 VM_USER ?= epibridge
 VM_DIR  ?= /opt/epibridge
 SSH     ?= ssh $(VM_USER)@$(VM_HOST)
+PYTHON  ?= python3
 
-.PHONY: dev clean install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build
+.PHONY: dev clean install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build test dev-test
 
 install:
 	$(SSH) 'cd $(VM_DIR) && ./scripts/install.sh'
@@ -50,6 +51,19 @@ SVC ?=
 
 dev-build:
 	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose build $(SVC) && docker compose up -d $(SVC)'
+
+test:
+	@failed=0; \
+	(cd backend && $(PYTHON) -m pytest tests/unit -v --cov=app --cov-report=term-missing --no-header -q) || failed=1; \
+	echo ""; \
+	(cd backend && $(PYTHON) -m pytest tests/integration -v --no-header -q) || failed=1; \
+	echo ""; \
+	(cd backend && $(PYTHON) -m pytest tests/smoke -v --no-header -q) || failed=1; \
+	echo ""; \
+	if [ $$failed -eq 0 ]; then echo "=== All tests passed ==="; else echo "=== Some tests failed ==="; exit 1; fi
+
+dev-test:
+	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose exec -T backend python3 -m pytest tests/unit tests/integration tests/smoke -v --no-header -q --tb=short'
 
 clean:
 	@echo "=== EpiBridge Clean ==="

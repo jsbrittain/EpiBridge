@@ -79,6 +79,13 @@ Single monorepo. Do not add top-level directories without justification.
 - `make backup` — run backup.sh
 - `make restore FILE=<file>` — restore from backup
 
+**Testing** (from repo root):
+- `make test` — run unit, integration, and smoke test suites (CI compatible)
+- `make dev-test` — run full suite inside the container via SSH (requires dev stack)
+- `python -m pytest backend/tests/unit -v` — unit tests only
+- `python -m pytest backend/tests/integration -v` — integration tests (requires DB + Redis running)
+- `python -m pytest backend/tests/smoke -v` — smoke tests (requires full stack running)
+
 **Makefile dev targets** (OrbStack-specific, uses `scripts/orbstack.sh` under the hood):
 - `make dev` — one-command: create VM, mount repo, install, start, verify
 - `make dev-install` — install with `--dev` flag (individual step)
