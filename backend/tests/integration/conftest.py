@@ -1,5 +1,4 @@
 import pytest
-from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import engine

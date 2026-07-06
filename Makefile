@@ -4,7 +4,7 @@ VM_DIR  ?= /opt/epibridge
 SSH     ?= ssh $(VM_USER)@$(VM_HOST)
 PYTHON  ?= python3
 
-.PHONY: dev clean install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build test dev-test
+.PHONY: dev clean install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build test dev-test format lint fix
 
 install:
 	$(SSH) 'cd $(VM_DIR) && ./scripts/install.sh'
@@ -64,6 +64,16 @@ test:
 
 dev-test:
 	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose exec -T backend python3 -m pytest tests/unit tests/integration tests/smoke -v --no-header -q --tb=short'
+
+format:
+	cd backend && $(PYTHON) -m ruff format
+
+lint:
+	cd backend && $(PYTHON) -m ruff check
+
+fix:
+	cd backend && $(PYTHON) -m ruff check --fix
+	cd backend && $(PYTHON) -m ruff format
 
 clean:
 	@echo "=== EpiBridge Clean ==="

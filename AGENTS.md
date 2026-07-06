@@ -57,8 +57,18 @@ Single monorepo. Do not add top-level directories without justification.
 
 ### Developer commands
 
+The standard development workflow:
+
+```bash
+make dev          # bootstrap the full stack
+# During development
+make format       # auto-format code
+make lint         # static analysis
+make test         # run tests
+```
+
 **Backend** (from `backend/`):
-- `pip install -e .` — install dependencies
+- `pip install -e ".[dev]"` — install dependencies (including dev tools)
 - `uvicorn app.main:app --reload` — dev server
 - `alembic upgrade head` — run migrations
 - `python -m app.cli seed-admin` — seed admin user
@@ -78,6 +88,11 @@ Single monorepo. Do not add top-level directories without justification.
 - `make upgrade` — run upgrade.sh
 - `make backup` — run backup.sh
 - `make restore FILE=<file>` — restore from backup
+
+**Code quality** (from repo root):
+- `make format` — auto-format code (ruff for Python)
+- `make lint` — static analysis (ruff check)
+- `make fix` — auto-fix all fixable issues (run this most often)
 
 **Testing** (from repo root):
 - `make test` — run unit, integration, and smoke test suites (CI compatible)

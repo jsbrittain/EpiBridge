@@ -1,4 +1,5 @@
 # EpiBridge
+[![EpiBridge](https://github.com/kraemer-lab/EpiBridge/actions/workflows/EpiBridge.yml/badge.svg)](https://github.com/kraemer-lab/EpiBridge/actions/workflows/EpiBridge.yml)
 
 Secure remote analysis for sensitive epidemiological data.
 

@@ -1,10 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
 
 jobs:
   test:
@@ -22,6 +19,16 @@ jobs:
       run: |
         cd backend
         pip install -e ".[dev]"
+
+    - name: Format check
+      run: |
+        cd backend
+        python -m ruff format --check
+
+    - name: Lint
+      run: |
+        cd backend
+        python -m ruff check
 
     - name: Run unit tests
       run: |
