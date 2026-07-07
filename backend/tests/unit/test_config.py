@@ -1,11 +1,9 @@
 from app.core.config import Settings
 
 
-def test_settings_loads_with_minimal_env(monkeypatch):
-    monkeypatch.delenv("POSTGRES_HOST", raising=False)
-    monkeypatch.delenv("DOMAIN", raising=False)
-    monkeypatch.delenv("ADMIN_EMAIL", raising=False)
+def test_settings_loads_with_minimal_env():
     s = Settings(
+        _env_file=None,
         postgres_password="test-pw",
         redis_password="test-redis",
         secret_key="test-key",

@@ -2,7 +2,16 @@ import json
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +22,7 @@ from app.models.data_resource import DataResource
 from app.models.project import Project
 from app.models.project_data_resource import ProjectDataResource
 from app.models.user import User
+from app.schemas.ai_bundle_review import AIBundleReviewRead
 from app.schemas.analysis_bundle import (
     AnalysisBundleCreate,
     AnalysisBundleRead,
@@ -26,6 +36,7 @@ from app.schemas.execution_request import (
 )
 from app.schemas.output import OutputRead
 from app.schemas.project import ProjectCreate, ProjectRead
+from app.services.ai_review_service import request_and_perform_review
 from app.services.analysis_bundle_service import (
     create_bundle,
     get_environment_runtime,
@@ -67,6 +78,9 @@ def _get_owned_project(
 
 
 def _bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
+    ai_review = None
+    if bundle.ai_review is not None:
+        ai_review = AIBundleReviewRead.model_validate(bundle.ai_review)
     return AnalysisBundleRead(
         id=bundle.id,
         project_id=bundle.project_id,
@@ -84,6 +98,7 @@ def _bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
         parameters=bundle.parameters,
         created_at=bundle.created_at,
         updated_at=bundle.updated_at,
+        ai_review=ai_review,
     )
 
 
@@ -296,6 +311,7 @@ def post_project_bundle(
 )
 async def post_project_bundle_upload(
     project_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     name: str = Form(...),
     execution_environment_id: str = Form(...),
@@ -362,6 +378,42 @@ async def post_project_bundle_upload(
         )
 
     update_bundle(db, bundle.id, {"source_path": store_path, "status": "active"})
+
+    background_tasks.add_task(request_and_perform_review, bundle.id)
+
+    db.refresh(bundle)
+    return _bundle_to_read(bundle)
+
+
+@router.post(
+    "/projects/{project_id}/bundles/{bundle_id}/ai-review",
+    response_model=AnalysisBundleRead,
+    status_code=201,
+)
+def post_bundle_ai_review(
+    project_id: uuid.UUID,
+    bundle_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    bundle = (
+        db.query(AnalysisBundle)
+        .filter(
+            AnalysisBundle.id == bundle_id,
+            AnalysisBundle.project_id == project_id,
+        )
+        .first()
+    )
+    if bundle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis bundle not found",
+        )
+
+    background_tasks.add_task(request_and_perform_review, bundle.id)
+
     db.refresh(bundle)
     return _bundle_to_read(bundle)
 

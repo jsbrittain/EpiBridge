@@ -1,10 +1,11 @@
-VM_HOST ?= epibridge.local
-VM_USER ?= epibridge
-VM_DIR  ?= /opt/epibridge
-SSH     ?= ssh $(VM_USER)@$(VM_HOST)
-PYTHON  ?= python3
+VM_HOST      ?= epibridge.local
+VM_USER      ?= epibridge
+VM_DIR       ?= /opt/epibridge
+SSH          ?= ssh $(VM_USER)@$(VM_HOST)
+PYTHON       ?= python3
+DOCKER_COMPOSE ?= docker compose
 
-.PHONY: dev clean clean-db install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build test dev-test format lint fix playwright bootstrap ci ci-clean
+.PHONY: dev dev-ai clean clean-db install up down upgrade backup restore dev-install dev-up dev-down dev-shell dev-logs dev-build test dev-test format lint fix playwright bootstrap ci ci-clean
 
 # --- Shared bootstrap (no VM, no SSH) ---------------------------------------
 # Bootstrap initialises EpiBridge from scratch. Requires:
@@ -38,6 +39,9 @@ dev:
 	./scripts/orbstack.sh create || true
 	./scripts/orbstack.sh mount
 	$(MAKE) dev-install
+
+dev-ai:
+	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && $(DOCKER_COMPOSE) --profile ai up -d'
 
 dev-install:
 	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && ./scripts/install.sh --dev'

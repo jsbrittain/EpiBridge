@@ -12,9 +12,9 @@ containers/      Base analysis Docker images (python-3.13-scientific)
 vm/              cloud-init.yaml, Caddyfile (HTTPS, HSTS, compression,
                  security headers, request size limits), runtime spec
 scripts/         bootstrap.sh, install.sh, upgrade.sh, backup.sh, restore.sh, healthcheck.sh
-docker-compose.yml  6 services (postgres, redis, backend, worker, frontend,
-                    reverse-proxy), internal + frontend networks
-docs/            Architecture, security, API, vision docs
+docker-compose.yml  6 services + optional ollama (--profile ai),
+                    internal + frontend + external networks
+docs/            Architecture, security, API, vision, AI assistance docs
 ```
 
 ### Still needs creating
@@ -53,6 +53,7 @@ Single monorepo. Do not add top-level directories without justification.
 - Two-stage approval: execution approval then output approval
 - Never bypass the approval workflow
 - Use `Storage` and `Executor` interfaces (not coupling directly to Docker)
+- Only the optional AI service (Ollama) has outbound network access, and only for model downloads
 - Firebase Auth for auth, internal PostgreSQL for authorisation
 - Audit trail required for all actions
 
@@ -74,6 +75,7 @@ Once the core schema stabilises, Alembic will be reintroduced as a dedicated mil
 
 - **Institutional assets** (Data Resources, Execution Environments) are registered automatically via lifespan startup from YAML manifests.
 - **Researcher artefacts** (Projects, Analysis Bundles, Execution Requests) are created by users through the application.
+- **Internal system artefacts** (AIBundleReview) are created by background tasks during platform operation.
 - **Demo workspace** (optional) can be created by `seed-demo` CLI command — a development tool, not application startup logic.
 - **Manifest directories** (`RESOURCE_MANIFEST_DIR`, `ENVIRONMENT_MANIFEST_DIR`) are deployment configuration, not application defaults. Docker Compose sets them for development; production points them elsewhere.
 
@@ -136,6 +138,7 @@ make test         # run tests
 
 **Makefile dev targets** (OrbStack-specific, uses `scripts/orbstack.sh` under the hood):
 - `make dev` — one-command: create VM, mount repo, install, start, verify
+- `make dev-ai` — start the optional Ollama service on an already-running stack
 - `make dev-install` — install with `--dev` flag (individual step)
 - `make dev-up` — start services (individual step)
 - `make dev-down` — stop services (individual step)

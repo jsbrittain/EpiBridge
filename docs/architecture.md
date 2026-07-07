@@ -536,6 +536,55 @@ Project
 The bundle provides the executable description; the Execution Request
 captures when and how to run it.
 
+### AI Analysis Summaries
+
+After a bundle is uploaded, an optional **AI review** may be generated
+asynchronously. The review provides a natural-language summary of what the
+uploaded analysis appears to do. This is a non-blocking, advisory feature:
+
+* The review runs as a **background task** immediately after upload.
+* The researcher does not wait for it.
+* Execution never depends on the review succeeding.
+* Reviews are **cached per bundle** and reused until explicitly refreshed.
+* Existing bundles can be reviewed on demand without re-uploading.
+
+The review pipeline:
+
+```
+Upload bundle
+     ↓
+Register bundle in DB
+     ↓
+Queue AI review (background)
+     ↓
+AIProvider reviews source code
+     ↓
+Store review result
+     ↓
+Display when available
+```
+
+The review is stored in a separate `ai_bundle_reviews` table with a 1:1
+relationship to the Analysis Bundle. The response model includes an `ai_review`
+field that is present when AI assistance is configured.
+
+Internally, the architecture follows the same abstraction pattern used by
+the executor and bundle store:
+
+```
+AIReviewService       — creates review record, queues background task
+       ↓
+AIProvider (ABC)      — provider abstraction (extensible)
+       ↓
+OllamaProvider        — first implementation (local Ollama instance)
+       ↓
+Ollama API            — HTTP inference over internal Docker network
+```
+
+AI assistance is disabled by default (`AI_ASSIST_ENABLED=false`). When
+disabled, no review records are created, no background tasks are queued,
+and the platform behaves exactly as it does today.
+
 ⸻
 
 ## Execution Requests

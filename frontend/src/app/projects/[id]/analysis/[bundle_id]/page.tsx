@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AnalysisBundle, getProjectBundle, createExecutionRequest } from "@/lib/api";
+import {
+  AnalysisBundle,
+  getProjectBundle,
+  createExecutionRequest,
+  triggerAiReview,
+} from "@/lib/api";
+
+const TERMINAL_STATUSES = ["completed", "failed", "unavailable"];
 
 export default function AnalysisDetailPage() {
   const params = useParams();
@@ -15,13 +22,58 @@ export default function AnalysisDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+
+  const fetchBundle = useCallback(async () => {
+    const b = await getProjectBundle(projectId, bundleId);
+    setBundle(b);
+    return b;
+  }, [projectId, bundleId]);
 
   useEffect(() => {
-    getProjectBundle(projectId, bundleId)
-      .then(setBundle)
+    fetchBundle()
       .catch(() => setError("Failed to load analysis bundle"))
       .finally(() => setLoading(false));
-  }, [projectId, bundleId]);
+  }, [fetchBundle]);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const review = bundle?.ai_review;
+    if (!review || review.status !== "pending") {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const updated = await fetchBundle();
+        if (
+          updated.ai_review &&
+          TERMINAL_STATUSES.includes(updated.ai_review.status) &&
+          pollRef.current
+        ) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      }
+    }, 5000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [bundle?.ai_review?.status, fetchBundle]);
 
   const handleRun = async () => {
     setRunning(true);
@@ -34,6 +86,22 @@ export default function AnalysisDetailPage() {
       setError("Failed to create execution request");
       setRunning(false);
     }
+  };
+
+  const handleTriggerReview = async () => {
+    setReviewing(true);
+    try {
+      const updated = await triggerAiReview(projectId, bundleId);
+      setBundle(updated);
+    } catch {
+      setError("Failed to trigger AI review");
+    }
+    setReviewing(false);
+  };
+
+  const reviewActionLabel = () => {
+    if (!bundle?.ai_review) return "Generate AI Summary";
+    return "Refresh AI Summary";
   };
 
   if (loading) return <div className="card empty-state">Loading...</div>;
@@ -142,6 +210,75 @@ export default function AnalysisDetailPage() {
             <div>{new Date(bundle.updated_at).toLocaleDateString()}</div>
           </div>
         </div>
+      </div>
+
+      <div className="card" style={{ maxWidth: "640px", marginTop: "var(--spacing-lg)" }}>
+        <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
+          AI Analysis Summary
+        </h3>
+
+        {bundle.ai_review === null && (
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div>Not available for this deployment</div>
+          </div>
+        )}
+
+        {bundle.ai_review?.status === "pending" && (
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div>Status: Pending</div>
+          </div>
+        )}
+
+        {bundle.ai_review?.status === "completed" && (
+          <>
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Status
+              </div>
+              <div>Completed</div>
+            </div>
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Summary
+              </div>
+              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.summary}</div>
+            </div>
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Assessment
+              </div>
+              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.assessment}</div>
+            </div>
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Assessment Confidence
+              </div>
+              <div>{bundle.ai_review.assessment_confidence}</div>
+            </div>
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Reviewer Notes
+              </div>
+              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.reviewer_notes}</div>
+            </div>
+          </>
+        )}
+
+        {(bundle.ai_review?.status === "unavailable" || bundle.ai_review?.status === "failed") && (
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div>Status: Unavailable</div>
+          </div>
+        )}
+
+        {bundle.ai_review?.status !== "pending" && (
+          <button
+            className="btn"
+            onClick={handleTriggerReview}
+            disabled={reviewing}
+          >
+            {reviewing ? "Processing..." : reviewActionLabel()}
+          </button>
+        )}
       </div>
     </div>
   );

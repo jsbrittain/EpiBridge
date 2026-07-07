@@ -33,6 +33,26 @@ services:
     networks:
       - internal
 
+  # Ollama serves models to the platform over the internal network,
+  # but also requires external network access to download models from
+  # the Ollama registry. No other platform service requires Internet access.
+  ollama:
+    profiles:
+      - ai
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ollamadata:/root/.ollama
+    networks:
+      - internal
+      - external
+
   backend:
     build:
       context: ./backend
@@ -133,6 +153,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  ollamadata:
   caddydata:
   caddyconfig:
 
@@ -140,3 +161,6 @@ networks:
   internal:
     internal: true
   frontend:
+  # Provides outbound Internet access for administrative tasks such as
+  # pulling AI models. Only the Ollama service connects to this network.
+  external:

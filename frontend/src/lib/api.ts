@@ -35,6 +35,18 @@ export interface DataResource {
   updated_at: string;
 }
 
+export interface AIBundleReview {
+  id: string;
+  bundle_id: string;
+  status: string;
+  summary: string | null;
+  assessment: string | null;
+  assessment_confidence: string | null;
+  reviewer_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AnalysisBundle {
   id: string;
   project_id: string;
@@ -51,6 +63,7 @@ export interface AnalysisBundle {
   parameters: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  ai_review: AIBundleReview | null;
 }
 
 export interface AnalysisBundleCreate {
@@ -221,6 +234,16 @@ export async function getProjectBundle(
   bundleId: string,
 ): Promise<AnalysisBundle> {
   return request<AnalysisBundle>(`/api/projects/${projectId}/bundles/${bundleId}`);
+}
+
+export async function triggerAiReview(
+  projectId: string,
+  bundleId: string,
+): Promise<AnalysisBundle> {
+  return request<AnalysisBundle>(
+    `/api/projects/${projectId}/bundles/${bundleId}/ai-review`,
+    { method: "POST" },
+  );
 }
 
 export async function updateProjectBundle(

@@ -10,6 +10,7 @@ from sqlalchemy.types import JSON
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.ai_bundle_review import AIBundleReview
     from app.models.data_resource import DataResource
     from app.models.execution_environment import ExecutionEnvironment
     from app.models.project import Project
@@ -54,6 +55,10 @@ class AnalysisBundle(Base):
 
     data_resources: Mapped[list["DataResource"]] = relationship(
         secondary="analysis_bundle_data_resources",
+    )
+
+    ai_review: Mapped["AIBundleReview | None"] = relationship(
+        back_populates="bundle", uselist=False
     )
 
 
