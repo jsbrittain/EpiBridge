@@ -17,7 +17,7 @@ class Executor(ABC):
         *,
         image: str,
         analysis_dir: Path,
-        entrypoint: str,
+        command: list[str],
         mounts: list[tuple[str, str, bool]],
         output_dir: Path,
         timeout: int,

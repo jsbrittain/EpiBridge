@@ -157,7 +157,7 @@ class TestDockerExecutor:
         result = executor.run(
             image="python:3.13-slim",
             analysis_dir=Path("/tmp/fake-analysis"),
-            entrypoint="run.py",
+            command=["python", "/analysis/run.py"],
             mounts=[("/src/data.csv", "/data/test_data/data.csv", True)],
             output_dir=output_dir,
             timeout=3600,
@@ -190,7 +190,7 @@ class TestDockerExecutor:
             executor.run(
                 image="python:3.13-slim",
                 analysis_dir=Path("/tmp/fake-analysis"),
-                entrypoint="run.py",
+                command=["python", "/analysis/run.py"],
                 mounts=[],
                 output_dir=output_dir,
                 timeout=1,
@@ -219,7 +219,7 @@ class TestDockerExecutor:
         result = executor.run(
             image="python:3.13-slim",
             analysis_dir=Path("/tmp/fake-analysis"),
-            entrypoint="run.py",
+            command=["python", "/analysis/run.py"],
             mounts=[],
             output_dir=output_dir,
             timeout=3600,

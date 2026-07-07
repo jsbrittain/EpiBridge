@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime
 
@@ -7,11 +8,27 @@ from app.schemas.ai_bundle_review import AIBundleReviewRead
 from app.schemas.execution_environment import _display_name
 
 
+class Interpreter(str, enum.Enum):
+    PYTHON = "python"
+    SHELL = "shell"
+    R = "r"
+
+    @property
+    def executable(self) -> str:
+        return {"python": "python", "shell": "bash", "r": "Rscript"}[self.value]
+
+    @property
+    def label(self) -> str:
+        return {"python": "Python", "shell": "Shell", "r": "R"}[self.value]
+
+
 class AnalysisBundleCreate(BaseModel):
     name: str
     execution_environment_id: uuid.UUID
     version: str
     entrypoint: str
+    interpreter: Interpreter = Interpreter.PYTHON
+    arguments: str = ""
     source_path: str = ""
     description: str = ""
     resource_identifiers: list[str] = []
@@ -31,9 +48,12 @@ class AnalysisBundleRead(BaseModel):
     runtime: str
     version: str
     entrypoint: str
+    interpreter: str = "python"
+    arguments: str = ""
     description: str
     build_status: str = "environment_not_built"
     build_error: str = ""
+    build_log: str = ""
     resource_identifiers: list[str] = []
     outputs: list[str] = []
     parameters: dict = {}
@@ -54,6 +74,8 @@ class AnalysisBundleUpdate(BaseModel):
     execution_environment_id: uuid.UUID | None = None
     version: str | None = None
     entrypoint: str | None = None
+    interpreter: Interpreter | None = None
+    arguments: str | None = None
     source_path: str | None = None
     description: str | None = None
     resource_identifiers: list[str] | None = None

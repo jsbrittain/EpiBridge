@@ -35,7 +35,7 @@ class DockerExecutor(Executor):
         *,
         image: str,
         analysis_dir: Path,
-        entrypoint: str,
+        command: list[str],
         mounts: list[tuple[str, str, bool]],
         output_dir: Path,
         timeout: int,
@@ -55,7 +55,7 @@ class DockerExecutor(Executor):
             volume_bindings[self._remap_source(source)] = {"bind": target, "mode": mode}
         container = self._client.containers.create(
             image,
-            entrypoint=["python", f"{ANALYSIS_TARGET}/{entrypoint}"],
+            command=command,
             network_disabled=True,
             working_dir=WORKDIR,
             user=NONROOT_USER,

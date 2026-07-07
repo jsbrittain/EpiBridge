@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { ExecutionRequest, getProjectExecutionRequests } from "@/lib/api";
+import LogViewer from "@/components/LogViewer";
 
 function statusStyle(status: string): React.CSSProperties {
   switch (status) {
@@ -27,6 +28,7 @@ export default function ProjectJobsPage() {
 
   const [requests, setRequests] = useState<ExecutionRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetch = useCallback(() => {
     getProjectExecutionRequests(projectId)
@@ -64,7 +66,12 @@ export default function ProjectJobsPage() {
         <tbody>
           {requests.map((r) => (
             <tr key={r.id}>
-              <td style={{ fontWeight: 500 }}>{r.analysis_name}</td>
+              <td
+                style={{ fontWeight: 500, cursor: "pointer", textDecoration: "underline dotted" }}
+                onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+              >
+                {r.analysis_name}
+              </td>
               <td>
                 <span
                   style={{
@@ -84,6 +91,15 @@ export default function ProjectJobsPage() {
               </td>
             </tr>
           ))}
+          {requests.map((r) =>
+            expandedId === r.id ? (
+              <tr key={`${r.id}-log`}>
+                <td colSpan={3} style={{ padding: "var(--spacing-md)", background: "var(--color-surface)" }}>
+                  <LogViewer log={r.log} title={r.status === "failed" ? "Execution Log (failed)" : "Execution Log"} maxHeight="300px" />
+                </td>
+              </tr>
+            ) : null
+          )}
         </tbody>
       </table>
     </div>

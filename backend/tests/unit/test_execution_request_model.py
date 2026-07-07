@@ -56,3 +56,22 @@ class TestExecutionRequestModel:
             requested_by_id=uuid.uuid4(),
         )
         assert request.parameter_overrides is None  # server_default, not in-memory
+
+    def test_default_log(self):
+        request = ExecutionRequest(
+            project_id=uuid.uuid4(),
+            analysis_bundle_id=uuid.uuid4(),
+            name="Default log",
+            requested_by_id=uuid.uuid4(),
+        )
+        assert request.log is None  # server_default, not in-memory
+
+    def test_can_set_log(self):
+        request = ExecutionRequest(
+            project_id=uuid.uuid4(),
+            analysis_bundle_id=uuid.uuid4(),
+            name="Log test",
+            requested_by_id=uuid.uuid4(),
+            log="[exec] stdout: Processing data\n[exec] exit code: 0",
+        )
+        assert request.log == "[exec] stdout: Processing data\n[exec] exit code: 0"

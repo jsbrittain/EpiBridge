@@ -23,6 +23,8 @@ export default function CreateAnalysisPage() {
   const [version, setVersion] = useState("");
   const [description, setDescription] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
+  const [interpreter, setInterpreter] = useState("python");
+  const [argumentsStr, setArgumentsStr] = useState("");
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,8 @@ export default function CreateAnalysisPage() {
     formData.append("execution_environment_id", selectedEnvId);
     formData.append("version", version.trim());
     formData.append("entrypoint", entrypoint.trim());
+    formData.append("interpreter", interpreter);
+    formData.append("arguments", argumentsStr.trim());
     formData.append("description", description.trim());
     formData.append("resource_identifiers", JSON.stringify(selectedResources));
 
@@ -222,6 +226,52 @@ export default function CreateAnalysisPage() {
               {fieldErrors.entrypoint}
             </div>
           )}
+        </div>
+
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <label htmlFor="analysis-interpreter" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+            Interpreter
+          </label>
+          <select
+            id="analysis-interpreter"
+            value={interpreter}
+            onChange={(e) => setInterpreter(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              fontSize: "0.9rem",
+              background: "var(--color-bg)",
+            }}
+          >
+            <option value="python">Python</option>
+            <option value="shell">Shell</option>
+            <option value="r">R</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <label htmlFor="analysis-arguments" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+            Arguments
+          </label>
+          <input
+            id="analysis-arguments"
+            type="text"
+            value={argumentsStr}
+            onChange={(e) => setArgumentsStr(e.target.value)}
+            placeholder="--verbose --output /output/results.csv"
+            style={{
+              width: "100%",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              fontSize: "0.9rem",
+            }}
+          />
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
+            Optional CLI arguments passed to the entrypoint script.
+          </div>
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>

@@ -12,7 +12,7 @@ def _display_name(runtime: str) -> str:
             version_parts.append(part)
         else:
             break
-    lang_map = {"python": "Python", "r": "R"}
+    lang_map = {"python": "Python", "r": "R", "conda": "Conda"}
     label = lang_map.get(lang, lang.capitalize())
     version = ".".join(version_parts) if version_parts else ""
     return f"{label} {version}".strip()

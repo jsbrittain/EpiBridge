@@ -58,10 +58,13 @@ export interface AnalysisBundle {
   status: string;
   build_status: string;
   build_error: string;
+  build_log: string;
   runtime: string;
   display_runtime: string;
   version: string;
   entrypoint: string;
+  interpreter: string;
+  arguments: string;
   description: string;
   resource_identifiers: string[];
   outputs: string[];
@@ -77,6 +80,8 @@ export interface AnalysisBundleCreate {
   execution_environment_id: string;
   version: string;
   entrypoint: string;
+  interpreter?: string;
+  arguments?: string;
   source_path?: string;
   description?: string;
   resource_identifiers?: string[];
@@ -90,6 +95,8 @@ export interface AnalysisBundleUpdate {
   execution_environment_id?: string;
   version?: string;
   entrypoint?: string;
+  interpreter?: string;
+  arguments?: string;
   description?: string;
   resource_identifiers?: string[];
   outputs?: string[];
@@ -104,6 +111,7 @@ export interface ExecutionRequest {
   timeout_seconds: number;
   parameter_overrides: Record<string, unknown>;
   status: string;
+  log: string;
   requested_by_id: string;
   analysis_name: string;
   runtime: string;
