@@ -6,7 +6,8 @@
 
 ```
 backend/         FastAPI scaffold (app entrypoint, health endpoint, SQLAlchemy,
-                 Alembic, config, Firebase auth stub, CLI seed-admin/seed-demo)
+                 Alembic, config, Firebase auth stub, CLI seed-admin,
+                 bundle store, worker execution)
 containers/      Base analysis Docker images (python-3.13-scientific)
 vm/              cloud-init.yaml, Caddyfile (HTTPS, HSTS, compression,
                  security headers, request size limits), runtime spec
@@ -73,7 +74,7 @@ Once the core schema stabilises, Alembic will be reintroduced as a dedicated mil
 
 - **Institutional assets** (Data Resources, Execution Environments) are registered automatically via lifespan startup from YAML manifests.
 - **Researcher artefacts** (Projects, Analysis Bundles, Execution Requests) are created by users through the application.
-- **Demo workspace** is created by `seed-demo` CLI command — a development tool, not application startup logic.
+- **Demo workspace** (optional) can be created by `seed-demo` CLI command — a development tool, not application startup logic.
 - **Manifest directories** (`RESOURCE_MANIFEST_DIR`, `ENVIRONMENT_MANIFEST_DIR`) are deployment configuration, not application defaults. Docker Compose sets them for development; production points them elsewhere.
 
 ### Developer commands
@@ -92,7 +93,7 @@ make test         # run tests
 - `pip install -e ".[dev]"` — install dependencies (including dev tools)
 - `uvicorn app.main:app --reload` — dev server (auto-creates schema on startup)
 - `python -m app.cli seed-admin` — seed admin user
-- `python -m app.cli seed-demo` — seed demo project + analysis bundle
+- `python -m app.cli seed-demo` — seed demo workspace (dev debugging tool)
 
 **Infrastructure** (from repo root):
 - `./scripts/bootstrap.sh` — single entry point (clone → install → verify)
@@ -130,8 +131,8 @@ make test         # run tests
 
 **Shared bootstrap** (from repo root, requires Docker):
 - `make bootstrap` — idempotent bootstrap used by both development and CI.
-  Generates `.env` if missing, builds images, starts services, seeds admin
-  and demo workspace. Safe to run multiple times.
+  Generates `.env` if missing, builds images, starts services, seeds admin.
+  Safe to run multiple times.
 
 **Makefile dev targets** (OrbStack-specific, uses `scripts/orbstack.sh` under the hood):
 - `make dev` — one-command: create VM, mount repo, install, start, verify
@@ -141,7 +142,7 @@ make test         # run tests
 - `make dev-shell` — interactive VM shell (individual step)
 - `make dev-logs` — tail container logs (individual step)
 - `make clean` — factory reset (remove containers, volumes, VM, .env)
-- `make clean-db` — reset researcher artefacts (projects, bundles, requests, outputs) and re-seed demo workspace
+- `make clean-db` — reset database (all researcher artefacts dropped, schema recreated on next startup)
 - `make dev-build SVC=frontend` — rebuild and restart a single service (fastest iteration)
 
 **VM / Dev environment** (see `vm/runtime.md`):
@@ -152,17 +153,17 @@ make test         # run tests
 The golden path is a single Playwright e2e test that proves the entire platform works from a researcher's perspective.
 
 ```bash
-make dev           # bootstrap full stack (creates VM, installs, seeds demo workspace)
+make dev           # bootstrap the full stack (OrbStack VM)
 make playwright    # run the golden-path e2e test
 ```
 
 The test (in `frontend/e2e/golden-path.spec.ts`) validates:
 1. Opening EpiBridge
 2. Dev auth auto-login
-3. Navigating to the demo project
-4. Opening the Analysis tab
-5. Selecting the demo analysis bundle
-6. Clicking Run Analysis
+3. Creating a project
+4. Attaching a data resource to the project
+5. Creating an analysis and uploading a bundle
+6. Running the analysis
 7. Waiting for PENDING → RUNNING → COMPLETED status transition
 8. Opening the Outputs tab
 9. Downloading `summary.csv`

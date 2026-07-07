@@ -128,21 +128,6 @@ export default function AnalysisDetailPage() {
           )}
         </div>
 
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Expected Outputs
-          </div>
-          {bundle.outputs.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: "var(--spacing-lg)" }}>
-              {bundle.outputs.map((o, i) => (
-                <li key={i} style={{ marginBottom: "var(--spacing-xs)" }}>{o}</li>
-              ))}
-            </ul>
-          ) : (
-            <div style={{ color: "var(--color-text-secondary)" }}>None specified</div>
-          )}
-        </div>
-
         <div style={{ display: "flex", gap: "var(--spacing-xl)", paddingTop: "var(--spacing-md)", borderTop: "1px solid var(--color-border)" }}>
           <div>
             <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>

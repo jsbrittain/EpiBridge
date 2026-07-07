@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     environment_manifest_dir: str = ""
     output_dir: str = "/tmp/epibridge-outputs"
     analysis_bundle_root: str = ""
+    bundle_store_dir: str = "/var/lib/epibridge/bundles"
     data_root: str = "/read-only-data"
     host_data_root: str = ""
 

@@ -80,16 +80,26 @@ done
 echo "PostgreSQL is ready."
 
 ###############################################################################
-# 6. Seed admin account
+# 6. Wait for backend API to be ready
+###############################################################################
+echo "Waiting for backend API..."
+until docker compose exec -T backend python3 -c "
+import http.client, json
+c = http.client.HTTPConnection('localhost', 8000, timeout=5)
+c.request('GET', '/api/health')
+r = c.getresponse()
+assert r.status == 200
+assert json.loads(r.read())['status'] == 'ok'
+" 2>/dev/null; do
+  sleep 2
+done
+echo "Backend API is ready."
+
+###############################################################################
+# 7. Seed admin account
 ###############################################################################
 echo "Seeding administrator account..."
 docker compose exec -T backend python -m app.cli seed-admin
-
-###############################################################################
-# 7. Seed demo workspace
-###############################################################################
-echo "Seeding demo workspace..."
-docker compose exec -T backend python -m app.cli seed-demo
 
 ###############################################################################
 # 8. Health check

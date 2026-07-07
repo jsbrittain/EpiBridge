@@ -1,83 +1,174 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { DataResource, getProjectResources } from "@/lib/api";
+import {
+  DataResource,
+  getProjectResources,
+  getAdminResources,
+  attachProjectResources,
+  detachProjectResource,
+} from "@/lib/api";
 
 export default function ProjectResourcesPage() {
   const params = useParams();
   const projectId = params.id as string;
 
-  const [resources, setResources] = useState<DataResource[]>([]);
+  const [attached, setAttached] = useState<DataResource[]>([]);
+  const [available, setAvailable] = useState<DataResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getProjectResources(projectId)
-      .then(setResources)
-      .catch(() => setError("Failed to load resources"))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [all, project] = await Promise.all([
+        getAdminResources(),
+        getProjectResources(projectId),
+      ]);
+      const attachedIds = new Set(project.map((r) => r.id));
+      setAttached(project);
+      setAvailable(all.filter((r) => !attachedIds.has(r.id)));
+    } catch {
+      setError("Failed to load resources");
+    } finally {
+      setLoading(false);
+    }
   }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleAttach = async (identifier: string) => {
+    try {
+      await attachProjectResources(projectId, [identifier]);
+      await load();
+    } catch {
+      setError("Failed to attach resource");
+    }
+  };
+
+  const handleDetach = async (resourceId: string) => {
+    try {
+      await detachProjectResource(projectId, resourceId);
+      await load();
+    } catch {
+      setError("Failed to detach resource");
+    }
+  };
 
   return (
     <div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
-        Data Resources
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-lg)" }}>
+        Configure Resources
       </h2>
+
+      {error && (
+        <div
+          style={{
+            color: "#e65100",
+            marginBottom: "var(--spacing-md)",
+            fontSize: "0.9rem",
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="card empty-state">Loading...</div>
-      ) : error ? (
-        <div className="card empty-state">{error}</div>
-      ) : resources.length === 0 ? (
-        <div className="card empty-state">No resources available for this project.</div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Provider</th>
-                <th>Version</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resources.map((r) => (
-                <tr key={r.id}>
-                  <td style={{ fontWeight: 500 }}>{r.name}</td>
-                  <td style={{ color: "var(--color-text-secondary)" }}>
-                    {r.provider_type}
-                  </td>
-                  <td style={{ color: "var(--color-text-secondary)" }}>
-                    {r.version}
-                  </td>
-                  <td>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.8rem",
-                        fontWeight: 600,
-                        background:
-                          r.status === "active"
-                            ? "var(--color-success-bg, #e6f7e6)"
-                            : "var(--color-warning-bg, #fff3e0)",
-                        color:
-                          r.status === "active"
-                            ? "var(--color-success, #2e7d32)"
-                            : "var(--color-warning, #e65100)",
-                      }}
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
+            Attached Data Resources
+          </h3>
+          {attached.length === 0 ? (
+            <div className="card empty-state" style={{ marginBottom: "var(--spacing-lg)" }}>
+              No resources attached. Select from the available resources below.
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "var(--spacing-lg)" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Provider</th>
+                    <th>Identifier</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attached.map((r) => (
+                    <tr key={r.id}>
+                      <td style={{ fontWeight: 500 }}>{r.name}</td>
+                      <td style={{ color: "var(--color-text-secondary)" }}>
+                        {r.provider_type}
+                      </td>
+                      <td style={{ color: "var(--color-text-secondary)", fontFamily: "monospace", fontSize: "0.85rem" }}>
+                        {r.identifier}
+                      </td>
+                      <td>
+                        <button
+                          className="btn"
+                          style={{ fontSize: "0.8rem", padding: "2px 10px" }}
+                          onClick={() => handleDetach(r.id)}
+                        >
+                          Detach
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
+            Available Data Resources
+          </h3>
+          {available.length === 0 ? (
+            <div className="card empty-state">
+              All available resources are attached.
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Provider</th>
+                    <th>Identifier</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {available.map((r) => (
+                    <tr key={r.id}>
+                      <td style={{ fontWeight: 500 }}>{r.name}</td>
+                      <td style={{ color: "var(--color-text-secondary)" }}>
+                        {r.provider_type}
+                      </td>
+                      <td style={{ color: "var(--color-text-secondary)", fontFamily: "monospace", fontSize: "0.85rem" }}>
+                        {r.identifier}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-primary"
+                          style={{ fontSize: "0.8rem", padding: "2px 10px" }}
+                          onClick={() => handleAttach(r.identifier)}
+                        >
+                          Attach
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

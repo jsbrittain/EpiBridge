@@ -53,8 +53,10 @@ services:
       # The worker imports those outputs here after execution; the backend
       # serves them from here via the download endpoint.
       OUTPUT_DIR: /outputs
+      BUNDLE_STORE_DIR: /var/lib/epibridge/bundles
     volumes:
       - /var/lib/epibridge/outputs:/outputs:ro
+      - /var/lib/epibridge/bundles:/var/lib/epibridge/bundles:rw
       - /var/log/epibridge:/var/log/epibridge
       - ./examples/resources:/read-only-data:ro
       # Development manifest directories for lifespan auto-registration.
@@ -86,14 +88,15 @@ services:
       # Persistent output store — writes imported execution artefacts
       # to the same volume the backend reads from.
       OUTPUT_DIR: /outputs
+      ANALYSIS_BUNDLE_ROOT: /var/lib/epibridge/bundles
     volumes:
       # Docker socket enables DockerExecutor — the only component
       # that communicates with Docker Engine to orchestrate analysis containers.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/epibridge/outputs:/outputs
+      - /var/lib/epibridge/bundles:/var/lib/epibridge/bundles:ro
       - /var/log/epibridge:/var/log/epibridge
       - ./examples/resources:/read-only-data:ro
-      - ./examples/analyses:/app/examples/analyses:ro
     networks:
       - internal
     group_add:

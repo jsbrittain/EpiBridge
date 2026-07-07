@@ -6,9 +6,8 @@ import Link from "next/link";
 import {
   DataResource,
   ExecutionEnvironment,
-  AnalysisBundleCreate,
   getProjectResources,
-  createProjectBundle,
+  uploadProjectBundle,
   getExecutionEnvironments,
 } from "@/lib/api";
 
@@ -25,7 +24,7 @@ export default function CreateAnalysisPage() {
   const [description, setDescription] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
-  const [outputsStr, setOutputsStr] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -53,6 +52,8 @@ export default function CreateAnalysisPage() {
     if (!version.trim()) errors.version = "Version is required";
     if (!entrypoint.trim()) errors.entrypoint = "Entrypoint is required";
     if (!selectedEnvId) errors.environment = "Execution environment is required";
+    if (!file) errors.file = "Analysis bundle file is required";
+    else if (!file.name.endsWith(".zip")) errors.file = "File must be a ZIP archive";
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -60,25 +61,21 @@ export default function CreateAnalysisPage() {
   const handleSubmit = async () => {
     if (!validate()) return;
 
-    const data: AnalysisBundleCreate = {
-      name: name.trim(),
-      execution_environment_id: selectedEnvId,
-      version: version.trim(),
-      entrypoint: entrypoint.trim(),
-      description: description.trim(),
-      resource_identifiers: selectedResources,
-      outputs: outputsStr
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    };
+    const formData = new FormData();
+    formData.append("file", file!);
+    formData.append("name", name.trim());
+    formData.append("execution_environment_id", selectedEnvId);
+    formData.append("version", version.trim());
+    formData.append("entrypoint", entrypoint.trim());
+    formData.append("description", description.trim());
+    formData.append("resource_identifiers", JSON.stringify(selectedResources));
 
     setSaving(true);
     try {
-      await createProjectBundle(projectId, data);
+      await uploadProjectBundle(projectId, formData);
       router.push(`/projects/${projectId}/analysis`);
     } catch {
-      setFieldErrors({ form: "Failed to create analysis bundle." });
+      setFieldErrors({ form: "Failed to upload analysis bundle." });
       setSaving(false);
     }
   };
@@ -103,13 +100,15 @@ export default function CreateAnalysisPage() {
         )}
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+          <label htmlFor="analysis-name" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
             Name <span style={{ color: "#e65100" }}>*</span>
           </label>
           <input
+            id="analysis-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            placeholder="Analysis name"
             style={{
               width: "100%",
               padding: "var(--spacing-sm) var(--spacing-md)",
@@ -126,10 +125,11 @@ export default function CreateAnalysisPage() {
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+          <label htmlFor="analysis-env" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
             Execution Environment <span style={{ color: "#e65100" }}>*</span>
           </label>
           <select
+            id="analysis-env"
             value={selectedEnvId}
             onChange={(e) => setSelectedEnvId(e.target.value)}
             style={{
@@ -156,10 +156,11 @@ export default function CreateAnalysisPage() {
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+          <label htmlFor="analysis-version" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
             Version <span style={{ color: "#e65100" }}>*</span>
           </label>
           <input
+            id="analysis-version"
             type="text"
             value={version}
             onChange={(e) => setVersion(e.target.value)}
@@ -199,10 +200,11 @@ export default function CreateAnalysisPage() {
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+          <label htmlFor="analysis-entrypoint" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
             Entrypoint <span style={{ color: "#e65100" }}>*</span>
           </label>
           <input
+            id="analysis-entrypoint"
             type="text"
             value={entrypoint}
             onChange={(e) => setEntrypoint(e.target.value)}
@@ -259,24 +261,29 @@ export default function CreateAnalysisPage() {
         </div>
 
         <div style={{ marginBottom: "var(--spacing-lg)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
-            Expected Outputs
+          <label htmlFor="analysis-bundle" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+            Analysis Bundle <span style={{ color: "#e65100" }}>*</span>
           </label>
           <input
-            type="text"
-            value={outputsStr}
-            onChange={(e) => setOutputsStr(e.target.value)}
-            placeholder="summary.csv, figures/"
+            id="analysis-bundle"
+            type="file"
+            accept=".zip"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             style={{
               width: "100%",
               padding: "var(--spacing-sm) var(--spacing-md)",
-              border: "1px solid var(--color-border)",
+              border: `1px solid ${fieldErrors.file ? "#e65100" : "var(--color-border)"}`,
               borderRadius: "var(--radius-md)",
               fontSize: "0.9rem",
             }}
           />
+          {fieldErrors.file && (
+            <div style={{ color: "#e65100", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
+              {fieldErrors.file}
+            </div>
+          )}
           <div style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
-            Comma-separated list of expected output files or directories.
+            Upload a ZIP archive containing your analysis code (run.py etc.).
           </div>
         </div>
 
