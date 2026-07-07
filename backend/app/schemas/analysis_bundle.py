@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.ai_bundle_review import AIBundleReviewRead
+
 
 class AnalysisBundleCreate(BaseModel):
     name: str
@@ -34,6 +36,7 @@ class AnalysisBundleRead(BaseModel):
     parameters: dict = {}
     created_at: datetime
     updated_at: datetime
+    ai_review: AIBundleReviewRead | None = None
 
     model_config = {"from_attributes": True}
 

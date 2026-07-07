@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     data_root: str = "/read-only-data"
     host_data_root: str = ""
 
+    ai_assist_enabled: bool = False
+    ollama_base_url: str = "http://ollama:11434"
+    ollama_model: str = "llama3.2"
+
     @property
     def database_url(self) -> str:
         return (

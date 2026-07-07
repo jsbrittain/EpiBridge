@@ -39,9 +39,11 @@ The backend validates the token and maps it to an internal user.
 ### Analysis Bundles
 
 * `POST /projects/{project_id}/bundles` — create a bundle within a project
+* `POST /projects/{project_id}/bundles/upload` — upload and register a bundle ZIP archive
 * `GET /projects/{project_id}/bundles` — list bundles in a project
-* `GET /projects/{project_id}/bundles/{id}` — get bundle details
+* `GET /projects/{project_id}/bundles/{id}` — get bundle details (includes `ai_review` if AI assistance is configured)
 * `PUT /projects/{project_id}/bundles/{id}` — update a bundle
+* `POST /projects/{project_id}/bundles/{id}/ai-review` — trigger, retry, or refresh an AI analysis summary
 * `GET /admin/bundles` — list all bundles (admin)
 * `GET /admin/bundles/{id}` — get bundle details (admin)
 
