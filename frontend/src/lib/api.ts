@@ -182,6 +182,40 @@ export async function createProjectBundle(
   });
 }
 
+export async function uploadProjectBundle(
+  projectId: string,
+  formData: FormData,
+): Promise<AnalysisBundle> {
+  const res = await fetch(`/api/projects/${projectId}/bundles/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b) => b.detail).catch(() => res.statusText);
+    throw new Error(`Upload failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export async function attachProjectResources(
+  projectId: string,
+  resourceIdentifiers: string[],
+): Promise<DataResource[]> {
+  return request<DataResource[]>(`/api/projects/${projectId}/resources`, {
+    method: "POST",
+    body: JSON.stringify({ resource_identifiers: resourceIdentifiers }),
+  });
+}
+
+export async function detachProjectResource(
+  projectId: string,
+  resourceId: string,
+): Promise<void> {
+  await fetch(`/api/projects/${projectId}/resources/${resourceId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getProjectBundle(
   projectId: string,
   bundleId: string,

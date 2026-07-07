@@ -29,7 +29,6 @@ export default function EditAnalysisPage() {
   const [description, setDescription] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
-  const [outputsStr, setOutputsStr] = useState("");
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -46,7 +45,6 @@ export default function EditAnalysisPage() {
         setDescription(b.description);
         setEntrypoint(b.entrypoint);
         setSelectedResources(b.resource_identifiers);
-        setOutputsStr(b.outputs.join(", "));
         setResources(res);
         setEnvironments(envs);
         if (b.execution_environment_id) {
@@ -86,10 +84,6 @@ export default function EditAnalysisPage() {
         entrypoint: entrypoint.trim(),
         description: description.trim(),
         resource_identifiers: selectedResources,
-        outputs: outputsStr
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
       });
       router.push(`/projects/${projectId}/analysis/${bundleId}`);
     } catch {
@@ -267,28 +261,6 @@ export default function EditAnalysisPage() {
               ))}
             </div>
           )}
-        </div>
-
-        <div style={{ marginBottom: "var(--spacing-lg)" }}>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
-            Expected Outputs
-          </label>
-          <input
-            type="text"
-            value={outputsStr}
-            onChange={(e) => setOutputsStr(e.target.value)}
-            placeholder="summary.csv, figures/"
-            style={{
-              width: "100%",
-              padding: "var(--spacing-sm) var(--spacing-md)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-md)",
-              fontSize: "0.9rem",
-            }}
-          />
-          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
-            Comma-separated list of expected output files or directories.
-          </div>
         </div>
 
         <div style={{ display: "flex", gap: "var(--spacing-md)" }}>

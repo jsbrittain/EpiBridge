@@ -1,13 +1,17 @@
+import json
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.analysis_bundle import AnalysisBundle
+from app.models.data_resource import DataResource
 from app.models.project import Project
+from app.models.project_data_resource import ProjectDataResource
 from app.models.user import User
 from app.schemas.analysis_bundle import (
     AnalysisBundleCreate,
@@ -28,6 +32,7 @@ from app.services.analysis_bundle_service import (
     get_resource_identifiers,
     update_bundle,
 )
+from app.services.bundle_store import get_bundle_store
 from app.services.execution_environment_service import list_environments
 from app.services.execution_request_service import (
     create_execution_request,
@@ -110,6 +115,71 @@ def get_project_resources(
 ):
     project = _get_owned_project(db, project_id, current_user.id)
     return project.data_resources
+
+
+class _AttachResourcesBody(BaseModel):
+    resource_identifiers: list[str]
+
+
+@router.post(
+    "/projects/{project_id}/resources",
+    response_model=List[DataResourceRead],
+    status_code=200,
+)
+def post_project_resources(
+    project_id: uuid.UUID,
+    body: _AttachResourcesBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = _get_owned_project(db, project_id, current_user.id)
+    resources = (
+        db.query(DataResource)
+        .filter(DataResource.identifier.in_(body.resource_identifiers))
+        .all()
+    )
+    found = {r.identifier for r in resources}
+    missing = set(body.resource_identifiers) - found
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Data resources not found: {', '.join(sorted(missing))}",
+        )
+    existing = {r.identifier for r in project.data_resources}
+    for r in resources:
+        if r.identifier not in existing:
+            project.data_resources.append(r)
+    db.commit()
+    db.refresh(project)
+    return project.data_resources
+
+
+@router.delete(
+    "/projects/{project_id}/resources/{resource_id}",
+    status_code=204,
+)
+def delete_project_resource(
+    project_id: uuid.UUID,
+    resource_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    join = (
+        db.query(ProjectDataResource)
+        .filter(
+            ProjectDataResource.project_id == project_id,
+            ProjectDataResource.data_resource_id == resource_id,
+        )
+        .first()
+    )
+    if join is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not attached to this project",
+        )
+    db.delete(join)
+    db.commit()
 
 
 @router.get(
@@ -216,6 +286,83 @@ def post_project_bundle(
     _get_owned_project(db, project_id, current_user.id)
 
     bundle = create_bundle(db, data.model_dump(), project_id, current_user.id)
+    return _bundle_to_read(bundle)
+
+
+@router.post(
+    "/projects/{project_id}/bundles/upload",
+    response_model=AnalysisBundleRead,
+    status_code=201,
+)
+async def post_project_bundle_upload(
+    project_id: uuid.UUID,
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    execution_environment_id: str = Form(...),
+    version: str = Form(...),
+    entrypoint: str = Form(...),
+    description: str = Form(""),
+    resource_identifiers: str = Form("[]"),
+    outputs: str = Form("[]"),
+    parameters: str = Form("{}"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Uploaded file must be a ZIP archive",
+        )
+
+    ri = json.loads(resource_identifiers)
+    if not isinstance(ri, list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="resource_identifiers must be a JSON list",
+        )
+    outs = json.loads(outputs)
+    if not isinstance(outs, list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="outputs must be a JSON list",
+        )
+    params = json.loads(parameters)
+    if not isinstance(params, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="parameters must be a JSON object",
+        )
+
+    bundle_data = {
+        "name": name,
+        "execution_environment_id": execution_environment_id,
+        "version": version,
+        "entrypoint": entrypoint,
+        "source_path": "",
+        "description": description,
+        "resource_identifiers": ri,
+        "outputs": outs,
+        "parameters": params,
+        "status": "draft",
+    }
+
+    bundle = create_bundle(db, bundle_data, project_id, current_user.id)
+
+    store = get_bundle_store()
+    try:
+        store_path = store.store(bundle.id, file, entrypoint)
+    except ValueError as e:
+        db.delete(bundle)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    update_bundle(db, bundle.id, {"source_path": store_path, "status": "active"})
+    db.refresh(bundle)
     return _bundle_to_read(bundle)
 
 

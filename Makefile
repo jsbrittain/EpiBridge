@@ -15,6 +15,11 @@ PYTHON  ?= python3
 bootstrap:
 	./scripts/bootstrap.sh
 
+reset:
+	$(MAKE) clean-db
+	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && ./scripts/bootstrap.sh'
+	@echo "=== Development environment reset to known-good state ==="
+
 # --- CI targets (native Linux) -----------------------------------------------
 # CI bootstraps EpiBridge directly on the runner, runs the golden path test,
 # then tears everything down.
@@ -110,8 +115,8 @@ playwright:
 # --- Maintenance -------------------------------------------------------------
 
 clean-db:
-	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose exec -T postgres psql -U epibridge -c "DELETE FROM outputs; DELETE FROM execution_requests; DELETE FROM analysis_bundle_data_resources; DELETE FROM project_data_resources; DELETE FROM analysis_bundles; DELETE FROM projects;" && docker compose exec -T backend python -m app.cli seed-demo'
-	@echo "=== Researcher artefacts reset, demo workspace re-seeded ==="
+	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && docker compose restart backend'
+	@echo "=== Database reset (all tables recreated on startup) ==="
 
 clean:
 	@echo "=== EpiBridge Clean ==="

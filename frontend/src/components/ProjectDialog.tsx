@@ -32,7 +32,7 @@ export default function ProjectDialog({ onClose, onCreated }: Props) {
 
   return (
     <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <h2 className={styles.title}>Create Project</h2>
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
