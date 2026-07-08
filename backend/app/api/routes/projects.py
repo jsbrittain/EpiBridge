@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.analysis_bundle import AnalysisBundle
+from app.models.build_request import BuildRequest
 from app.models.data_resource import DataResource
 from app.models.project import Project
 from app.models.project_data_resource import ProjectDataResource
@@ -79,7 +80,7 @@ def _get_owned_project(
     return project
 
 
-def _bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
+def _bundle_to_read(bundle: AnalysisBundle, build_log: str = "") -> AnalysisBundleRead:
     ai_review = None
     if bundle.ai_review is not None:
         ai_review = AIBundleReviewRead.model_validate(bundle.ai_review)
@@ -94,12 +95,15 @@ def _bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
         runtime=get_environment_runtime(bundle),
         version=bundle.version,
         entrypoint=bundle.entrypoint,
+        interpreter=bundle.interpreter,
+        arguments=bundle.arguments,
         description=bundle.description,
         resource_identifiers=get_resource_identifiers(bundle),
         outputs=bundle.outputs,
         parameters=bundle.parameters,
         build_status=bundle.build_status,
         build_error=bundle.build_error,
+        build_log=build_log,
         created_at=bundle.created_at,
         updated_at=bundle.updated_at,
         ai_review=ai_review,
@@ -244,7 +248,16 @@ def get_project_bundle(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Analysis bundle not found",
         )
-    return _bundle_to_read(bundle)
+    build_log = ""
+    latest = (
+        db.query(BuildRequest)
+        .filter(BuildRequest.analysis_bundle_id == bundle.id)
+        .order_by(BuildRequest.created_at.desc())
+        .first()
+    )
+    if latest is not None:
+        build_log = latest.log
+    return _bundle_to_read(bundle, build_log=build_log)
 
 
 @router.put(
@@ -321,6 +334,8 @@ async def post_project_bundle_upload(
     execution_environment_id: str = Form(...),
     version: str = Form(...),
     entrypoint: str = Form(...),
+    interpreter: str = Form("python"),
+    arguments: str = Form(""),
     description: str = Form(""),
     resource_identifiers: str = Form("[]"),
     outputs: str = Form("[]"),
@@ -360,6 +375,8 @@ async def post_project_bundle_upload(
         "execution_environment_id": execution_environment_id,
         "version": version,
         "entrypoint": entrypoint,
+        "interpreter": interpreter,
+        "arguments": arguments,
         "source_path": "",
         "description": description,
         "resource_identifiers": ri,

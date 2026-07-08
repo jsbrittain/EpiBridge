@@ -34,6 +34,25 @@ class TestBuildRequestModel:
         )
         assert br.error_message is None  # server_default, not in-memory
 
+    def test_default_log(self):
+        br = BuildRequest(
+            execution_environment_id=uuid.uuid4(),
+            analysis_bundle_id=uuid.uuid4(),
+            dependency_hash="a" * 64,
+            builder_type="python",
+        )
+        assert br.log is None  # server_default, not in-memory
+
+    def test_can_set_log(self):
+        br = BuildRequest(
+            execution_environment_id=uuid.uuid4(),
+            analysis_bundle_id=uuid.uuid4(),
+            dependency_hash="a" * 64,
+            builder_type="python",
+            log="[build] Building image...\n[build] Done",
+        )
+        assert br.log == "[build] Building image...\n[build] Done"
+
     def test_can_set_execution_image_id(self):
         img_id = uuid.uuid4()
         br = BuildRequest(

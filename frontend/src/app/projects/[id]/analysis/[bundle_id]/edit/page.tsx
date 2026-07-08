@@ -28,6 +28,8 @@ export default function EditAnalysisPage() {
   const [version, setVersion] = useState("");
   const [description, setDescription] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
+  const [interpreter, setInterpreter] = useState("python");
+  const [argumentsStr, setArgumentsStr] = useState("");
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -44,6 +46,8 @@ export default function EditAnalysisPage() {
         setVersion(b.version);
         setDescription(b.description);
         setEntrypoint(b.entrypoint);
+        setInterpreter(b.interpreter || "python");
+        setArgumentsStr(b.arguments || "");
         setSelectedResources(b.resource_identifiers);
         setResources(res);
         setEnvironments(envs);
@@ -82,6 +86,8 @@ export default function EditAnalysisPage() {
         execution_environment_id: selectedEnvId || undefined,
         version: version.trim(),
         entrypoint: entrypoint.trim(),
+        interpreter,
+        arguments: argumentsStr.trim(),
         description: description.trim(),
         resource_identifiers: selectedResources,
       });
@@ -225,6 +231,52 @@ export default function EditAnalysisPage() {
               {fieldErrors.entrypoint}
             </div>
           )}
+        </div>
+
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <label htmlFor="edit-interpreter" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+            Interpreter
+          </label>
+          <select
+            id="edit-interpreter"
+            value={interpreter}
+            onChange={(e) => setInterpreter(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              fontSize: "0.9rem",
+              background: "var(--color-bg)",
+            }}
+          >
+            <option value="python">Python</option>
+            <option value="shell">Shell</option>
+            <option value="r">R</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <label htmlFor="edit-arguments" style={{ display: "block", fontWeight: 600, marginBottom: "var(--spacing-xs)", fontSize: "0.9rem" }}>
+            Arguments
+          </label>
+          <input
+            id="edit-arguments"
+            type="text"
+            value={argumentsStr}
+            onChange={(e) => setArgumentsStr(e.target.value)}
+            placeholder="--verbose --output /output/results.csv"
+            style={{
+              width: "100%",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              fontSize: "0.9rem",
+            }}
+          />
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
+            Optional CLI arguments passed to the entrypoint script.
+          </div>
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>

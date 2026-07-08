@@ -40,6 +40,10 @@ class AnalysisBundle(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     version: Mapped[str] = mapped_column(String(50), nullable=False)
     entrypoint: Mapped[str] = mapped_column(String(255), nullable=False)
+    interpreter: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="python"
+    )
+    arguments: Mapped[str] = mapped_column(Text, nullable=False, default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     outputs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

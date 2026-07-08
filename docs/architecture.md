@@ -414,6 +414,7 @@ environments with specific packages and tooling:
 
 * Python 3.13 (slim, NumPy, Pandas)
 * Python 3.14 (slim, NumPy, Pandas)
+* Conda (Micromamba 2.x)
 
 ### Environment Model
 
@@ -422,7 +423,7 @@ ExecutionEnvironment
 ├── id              (UUID, auto-generated)
 ├── identifier      (stable institutional identity)
 ├── name            (human-readable display name)
-├── runtime         ("python-3.13", "r-4.5", etc.)
+├── runtime         ("python-3.13", "conda", "r-4.5", etc.)
 ├── description     (curated package summary)
 ├── status          ("active", "deprecated")
 ├── image_reference (Docker image tag, for future execution)
@@ -750,7 +751,7 @@ curated platform assets.
 ```
 builder_templates/
   python/Dockerfile       # ARG BASE_IMAGE → pip install -r requirements.txt
-  conda/Dockerfile        # future
+  conda/Dockerfile        # ARG BASE_IMAGE → micromamba install -f environment.yml
   r/Dockerfile            # future
   poetry/Dockerfile       # future
   dockerfile/Dockerfile   # future (trusted user Dockerfiles)
@@ -806,7 +807,7 @@ Builder containers must never receive:
 - User sessions
 - Analysis code (only dependency specifications)
 
-### Future builders
+### Adding a new builder
 
 Adding a new builder requires:
 1. Create a curated Dockerfile template in `builder_templates/{type}/Dockerfile`
@@ -877,7 +878,7 @@ The Worker delegates container management to an Executor interface:
 ```
 Worker
   └── Executor (interface)
-        └── run(image, analysis_dir, entrypoint, mounts, output_dir, timeout, env) → Result
+        └── run(image, analysis_dir, command, mounts, output_dir, timeout, env) → Result
 
 Implementation:
   └── DockerExecutor (docker-py)
@@ -1154,7 +1155,7 @@ It delegates to an executor interface:
 ```
 Worker
   └── Executor (interface)
-        └── run(job) → Result
+        └── run(image, analysis_dir, command, mounts, output_dir, timeout, env) → Result
 
 Implementations:
   ├── DockerExecutor      ← communicates with Docker Engine

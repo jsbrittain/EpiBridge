@@ -9,6 +9,7 @@ import {
   createExecutionRequest,
   triggerAiReview,
 } from "@/lib/api";
+import LogViewer from "@/components/LogViewer";
 
 const TERMINAL_STATUSES = ["completed", "failed", "unavailable"];
 
@@ -180,11 +181,16 @@ export default function AnalysisDetailPage() {
             {bundle.build_status === "environment_build_failed" && (
               <span>
                 <span style={{ color: "#d32f2f" }}>Execution environment could not be prepared</span>
-                {bundle.build_error && (
-                  <div style={{ marginTop: "var(--spacing-xs)", color: "var(--color-text-secondary)", fontWeight: 400, fontSize: "0.8rem", lineHeight: 1.5 }}>
-                    {bundle.build_error}
-                  </div>
+                {bundle.build_log && (
+                  <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
+                    <LogViewer log={bundle.build_log} title="Build Log (failed)" maxHeight="200px" />
+                  </span>
                 )}
+              </span>
+            )}
+            {bundle.build_status === "environment_ready" && bundle.build_log && (
+              <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
+                <LogViewer log={bundle.build_log} title="Build Log" maxHeight="200px" />
               </span>
             )}
           </div>
@@ -229,10 +235,26 @@ export default function AnalysisDetailPage() {
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
           <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Interpreter
+          </div>
+          <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
+        </div>
+
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Entrypoint
           </div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint}</div>
         </div>
+
+        {bundle.arguments && (
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Arguments
+            </div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.arguments}</div>
+          </div>
+        )}
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>
           <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>

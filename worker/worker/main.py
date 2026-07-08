@@ -1,6 +1,8 @@
 import logging
 import os
+import shlex
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -10,6 +12,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.execution.docker import DockerExecutor
 from app.models.analysis_bundle import AnalysisBundle
+from app.schemas.analysis_bundle import Interpreter
 from app.models.build_request import BuildRequest, BuildRequestStatus
 from app.models.execution_environment import ExecutionEnvironment
 from app.models.execution_image import ExecutionImage
@@ -32,6 +35,10 @@ ANALYSIS_ROOT = (
 )
 DATA_ROOT = Path(settings.data_root)
 POLL_INTERVAL = 5
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def get_pending_requests(db: Session) -> list[ExecutionRequest]:
@@ -106,13 +113,19 @@ def resolve_data_mounts(
 
 
 def process_build(db: Session, build: BuildRequest) -> None:
+    ts = _timestamp()
     bundle = db.query(AnalysisBundle).get(build.analysis_bundle_id)
     if bundle is None:
+        build.log = f"[{ts}] BUILD FAILED: bundle not found (id={build.analysis_bundle_id})"
         build_transition_to(db, build, BuildRequestStatus.FAILED, "bundle not found")
         return
 
     env = db.query(ExecutionEnvironment).get(build.execution_environment_id)
     if env is None:
+        build.log = (
+            f"[{ts}] BUILD FAILED: execution environment not found "
+            f"(id={build.execution_environment_id})"
+        )
         build_transition_to(
             db, build, BuildRequestStatus.FAILED, "environment not found"
         )
@@ -120,6 +133,10 @@ def process_build(db: Session, build: BuildRequest) -> None:
 
     builder = builder_registry.get_for_runtime(env.runtime)
     if builder is None:
+        build.log = (
+            f"[{ts}] BUILD FAILED: no builder registered for runtime "
+            f"'{env.runtime}'"
+        )
         build_transition_to(
             db, build, BuildRequestStatus.FAILED, "no builder for runtime"
         )
@@ -127,6 +144,10 @@ def process_build(db: Session, build: BuildRequest) -> None:
 
     bundle_path = get_bundle_store().get_path(bundle.id)
     if not bundle_path.is_dir():
+        build.log = (
+            f"[{ts}] BUILD FAILED: bundle directory not found "
+            f"(bundle_id={bundle.id})"
+        )
         build_transition_to(
             db, build, BuildRequestStatus.FAILED, "bundle directory not found"
         )
@@ -143,11 +164,29 @@ def process_build(db: Session, build: BuildRequest) -> None:
         .first()
     )
     if existing is not None:
+        log = (
+            f"[{ts}] BUILD CACHE HIT\n"
+            f"[build] builder={build.builder_type} runtime={env.runtime}\n"
+            f"[build] hash={build.dependency_hash}\n"
+            f"[build] existing image: {existing.image_reference}\n"
+            f"[build] Using cached execution image (id={existing.id})"
+        )
+        build.log = log
         bundle.execution_image_id = existing.id
         bundle.build_status = "environment_ready"
         build.execution_image_id = existing.id
         build_transition_to(db, build, BuildRequestStatus.COMPLETED, "cache hit (race)")
         return
+
+    build_start = _timestamp()
+    preamble = (
+        f"[{build_start}] BUILD STARTED\n"
+        f"[build] builder={build.builder_type} runtime={env.runtime}\n"
+        f"[build] hash={build.dependency_hash}\n"
+        f"[build] base_image={env.image_reference}\n"
+        f"[build] image_tag={tag}\n"
+        f"[build] bundle_path={bundle_path}"
+    )
 
     bundle.build_status = "environment_building"
     build_transition_to(db, build, BuildRequestStatus.BUILDING)
@@ -158,7 +197,13 @@ def process_build(db: Session, build: BuildRequest) -> None:
         image_tag=tag,
     )
 
+    build_end = _timestamp()
     if not result.success:
+        build.log = (
+            f"{preamble}\n"
+            f"[{build_end}] BUILD FAILED (duration={result.duration_seconds:.1f}s)\n"
+            f"{result.build_log}"
+        )
         bundle.build_status = "environment_build_failed"
         bundle.build_error = result.build_log
         db.commit()
@@ -188,6 +233,13 @@ def process_build(db: Session, build: BuildRequest) -> None:
         cached.builder_type = build.builder_type
         cached.build_log = result.build_log
 
+    ref = result.image_reference
+    build.log = (
+        f"{preamble}\n"
+        f"[{build_end}] BUILD COMPLETED (duration={result.duration_seconds:.1f}s)\n"
+        f"{result.build_log}\n"
+        f"[build] Result image: {ref}"
+    )
     bundle.execution_image_id = cached.id
     bundle.build_status = "environment_ready"
     build.execution_image_id = cached.id
@@ -195,13 +247,18 @@ def process_build(db: Session, build: BuildRequest) -> None:
 
 
 def execute_request(db: Session, request: ExecutionRequest) -> None:
+    ts = _timestamp()
     bundle = db.query(AnalysisBundle).get(request.analysis_bundle_id)
     if bundle is None:
+        request.log = f"[{ts}] EXECUTION FAILED: bundle not found (id={request.analysis_bundle_id})"
+        db.commit()
         transition_to(db, request, ExecutionRequestStatus.FAILED, "bundle not found")
         return
 
     env = db.query(ExecutionEnvironment).get(bundle.execution_environment_id)
     if env is None:
+        request.log = f"[{ts}] EXECUTION FAILED: environment not found"
+        db.commit()
         transition_to(
             db, request, ExecutionRequestStatus.FAILED, "environment not found"
         )
@@ -213,6 +270,8 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         else env.image_reference
     )
     if not image:
+        request.log = f"[{ts}] EXECUTION FAILED: no image reference"
+        db.commit()
         transition_to(db, request, ExecutionRequestStatus.FAILED, "no image reference")
         return
 
@@ -220,6 +279,10 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         ANALYSIS_ROOT / bundle.source_path if bundle.source_path else ANALYSIS_ROOT
     )
     if not analysis_dir.is_dir():
+        request.log = (
+            f"[{ts}] EXECUTION FAILED: analysis directory not found: {analysis_dir}"
+        )
+        db.commit()
         transition_to(
             db,
             request,
@@ -229,6 +292,18 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         return
 
     entrypoint = bundle.entrypoint
+    interpreter_str = bundle.interpreter or "python"
+    try:
+        interpreter = Interpreter(interpreter_str)
+    except ValueError:
+        request.log = (
+            f"[{_timestamp()}] EXECUTION FAILED: unknown interpreter '{interpreter_str}'"
+        )
+        db.commit()
+        transition_to(db, request, ExecutionRequestStatus.FAILED, f"unknown interpreter '{interpreter_str}'")
+        return
+    extra = shlex.split(bundle.arguments) if bundle.arguments else []
+    command = [interpreter.executable, f"/analysis/{entrypoint}"] + extra
     output_dir = OUTPUT_ROOT / str(request.id)
     data_mounts = resolve_data_mounts(bundle, db)
     timeout = request.timeout_seconds
@@ -238,27 +313,64 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         mount_remap[settings.data_root] = settings.host_data_root
     executor = DockerExecutor(mount_remap=mount_remap)
 
+    exec_start = _timestamp()
+    preamble = (
+        f"[{exec_start}] EXECUTION STARTED\n"
+        f"[exec] bundle={bundle.name} interpreter={interpreter_str} entrypoint={entrypoint}\n"
+        f"[exec] command={' '.join(command)}\n"
+        f"[exec] image={image}\n"
+        f"[exec] timeout={timeout}s"
+    )
+    request.log = preamble
+    db.commit()
+
     transition_to(db, request, ExecutionRequestStatus.RUNNING)
 
     try:
         result = executor.run(
             image=image,
             analysis_dir=analysis_dir,
-            entrypoint=entrypoint,
+            command=command,
             mounts=data_mounts,
             output_dir=output_dir,
             timeout=timeout,
             env={},
         )
     except TimeoutError:
+        exec_end = _timestamp()
+        request.log = (
+            f"{preamble}\n"
+            f"[{exec_end}] EXECUTION TIMED OUT after {timeout}s\n"
+            f"[exec] No output captured — container was terminated"
+        )
+        db.commit()
         transition_to(db, request, ExecutionRequestStatus.FAILED, "timeout")
         return
     except Exception as e:
+        exec_end = _timestamp()
+        request.log = (
+            f"{preamble}\n"
+            f"[{exec_end}] EXECUTION FAILED: {e}"
+        )
+        db.commit()
         transition_to(db, request, ExecutionRequestStatus.FAILED, str(e))
         return
 
+    exec_end = _timestamp()
+    log_body = ""
+    if result.stdout:
+        log_body += f"[exec] stdout:\n{result.stdout.rstrip()}\n"
+    if result.stderr:
+        log_body += f"[exec] stderr:\n{result.stderr.rstrip()}\n"
+
     if result.exit_code != 0:
         logger.error(f"Execution failed (exit {result.exit_code}): {result.stderr}")
+        request.log = (
+            f"{preamble}\n"
+            f"[{exec_end}] EXECUTION FAILED (exit code {result.exit_code})\n"
+            f"{log_body}"
+        )
+        db.commit()
         transition_to(
             db,
             request,
@@ -270,6 +382,7 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
     # The filename field represents the relative path within the execution
     # output directory (e.g. "summary.csv", "figures/plot.png").
     # This preserves structured output hierarchies without flattening.
+    output_count = 0
     if output_dir.is_dir():
         from app.services.output_service import register_output
 
@@ -278,10 +391,18 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
                 fpath = os.path.join(root, fname)
                 relative = os.path.relpath(fpath, output_dir)
                 register_output(db, request.id, relative, os.path.getsize(fpath))
+                output_count += 1
                 logger.info(
                     f"Registered output: {relative} ({os.path.getsize(fpath)} bytes)"
                 )
 
+    request.log = (
+        f"{preamble}\n"
+        f"[{exec_end}] EXECUTION COMPLETED (exit code 0)\n"
+        f"{log_body}"
+        f"[exec] Output files: {output_count}"
+    )
+    db.commit()
     transition_to(db, request, ExecutionRequestStatus.COMPLETED)
 
 

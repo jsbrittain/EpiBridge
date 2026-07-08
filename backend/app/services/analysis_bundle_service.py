@@ -119,6 +119,8 @@ def create_bundle(
         name=data["name"],
         version=data["version"],
         entrypoint=data["entrypoint"],
+        interpreter=data.get("interpreter", "python"),
+        arguments=data.get("arguments", ""),
         source_path=data.get("source_path", ""),
         description=data.get("description", ""),
         outputs=data.get("outputs", []),

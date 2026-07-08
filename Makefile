@@ -119,7 +119,7 @@ playwright:
 # --- Maintenance -------------------------------------------------------------
 
 clean-db:
-	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && docker compose restart backend'
+	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose start postgres 2>/dev/null; docker compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || (docker compose up -d postgres && sleep 3 && docker compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"); docker compose restart backend'
 	@echo "=== Database reset (all tables recreated on startup) ==="
 
 clean:
