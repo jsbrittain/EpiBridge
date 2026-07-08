@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Project status — Milestone 16 complete (Identity Management)
+## Project status — Milestone 17 complete (Audit & Provenance)
 
 ### Exists and functional
 
@@ -10,17 +10,20 @@ backend/         FastAPI: identity model (User, Role, Capability,
                  Alembic-ready, config, Local Identity Provider auth,
                  CLI seed-admin/seed-demo, bundle store, worker execution,
                  Environment Builder subsystem, auth framework seeder,
-                 user management API (create/list/get users), email validation
+                 user management API (create/list/get users), email validation,
+                 audit event model (AuditEvent, AuditEventType), audit service,
+                 audit query API
 frontend/        Next.js + React + TypeScript: login, projects, admin pages,
-                 user management UI, project members UI
+                 user management UI, project members UI, audit log tab,
+                 per-project and per-resource audit views
 containers/      Base analysis Docker images (python-3.13, python-3.14)
 vm/              cloud-init.yaml, Caddyfile (HTTPS, HSTS, compression,
                  security headers, request size limits), runtime spec
 scripts/         bootstrap.sh, install.sh, upgrade.sh, backup.sh, restore.sh, healthcheck.sh
 docker-compose.yml  6 services + optional ollama (--profile ai),
                     internal + frontend + external networks
-tests/           Unit (223), integration (identity validation, user management,
-                 project membership), smoke, e2e (canonical workflow)
+tests/           Unit (256), integration (identity validation, user management,
+                 project membership, audit), smoke, e2e (canonical workflow)
 docs/            Architecture (current state), security, API, vision, AI assistance
 ```
 
@@ -106,6 +109,104 @@ ProjectMembership answers one question only: does this User participate in this 
 - No roles, capabilities, or permissions are stored on membership.
 - The project creator becomes the first member automatically.
 - Access requires: (1) membership in the project, (2) the required capability.
+
+### Audit Event Model
+
+Audit Events record institutional decisions and governance-significant outcomes.
+
+- Immutable and append-only
+- Attributable to an actor (authenticated user or seeded system user)
+- Associated with a Project and a governed resource
+- Accompanied by structured metadata
+
+The model and service are defined in `app.models.audit_event` and `app.services.audit_service`.
+
+### System Actors
+
+Autonomous platform components are represented by seeded `User` records with well-known UUIDs.
+
+These accounts have no password (`password_hash=""`) and cannot authenticate through the API. They exist solely as accountable actors referenced by Audit Events.
+
+| Actor | UUID | Email | Role |
+|---|---|---|---|
+| System | `00000000-0000-0000-0000-000000000001` | `system@epibridge.internal` | `maintainer` |
+| Execution Worker | `00000000-0000-0000-0000-000000000002` | `execution_worker@epibridge.internal` | `maintainer` |
+
+A `role` value is required by the schema; `maintainer` is used as the closest semantic match to a platform operator. No capabilities are assigned — these are audit identities, not RBAC participants.
+
+System users are seeded idempotently by `seed_auth_framework()` (`auth_framework_seeder._seed_system_users()`).
+
+### Audit Query API
+
+The audit ledger is exposed through a single read-only query endpoint:
+
+```
+GET /api/admin/audit-events
+```
+
+Supports filtering by: `project_id`, `actor_id`, `resource_type`, `resource_id`, `event_type`, `date_from`, `date_to`.
+
+Supports pagination via `limit` (max 200) and `offset`, and ordering via `order` (`asc`/`desc`, default `desc`).
+
+Returns actor details (display name, email) alongside each event via a join to the `users` table.
+
+Access requires one of: `bundle.review`, `output.review`, or `user.manage` capability.
+
+Defined in `app.api.routes.admin` and `app.services.audit_service`.
+
+### Audit Event Taxonomy
+
+The canonical audit vocabulary for Milestone 17.
+
+Audit Events record either:
+
+- institutional decisions; or
+- externally significant outcomes.
+
+#### Project
+
+Project events record the creation, membership, and resource allocation lifecycle. These are deliberate governance actions that establish the institutional scope of research.
+
+- `project.created`
+- `project.member.added`
+- `project.member.removed`
+- `project.resource.allocated`
+- `project.resource.deallocated`
+
+#### Bundle
+
+Bundle events record the two-stage approval workflow for analysis code. Every transition is an institutional choice about what analysis is permitted to run.
+
+- `bundle.created`
+- `bundle.submitted`
+- `bundle.approved`
+- `bundle.rejected`
+- `bundle.superseded`
+
+#### Execution
+
+Execution events record the externally significant outcomes of running approved analysis. The start, completion, and failure of an execution are visible consequences of earlier governance decisions — a human acts on these outcomes.
+
+- `execution.requested`
+- `execution.started`
+- `execution.completed`
+- `execution.failed`
+- `execution.cancelled`
+
+#### Output
+
+Output events record the governance lifecycle of execution results, mirroring the two-stage approval pattern. The release of an output set is the terminal governance decision that makes results available to researchers.
+
+- `output_set.created`
+- `output_set.approved`
+- `output_set.rejected`
+- `output_set.released`
+
+#### User Administration
+
+User creation is an institutional act with security implications. User administration events are not project-scoped.
+
+- `user.created`
 
 ### Policy layer
 
@@ -238,8 +339,9 @@ The test (in `frontend/e2e/canonical-workflow.spec.ts`) validates:
 11. Releasing the Output Set (APPROVED → RELEASED), creating the Release Package ZIP
 12. Downloading the Release Package
 13. Verifying the ZIP contains the expected output file (`summary.csv`) and execution metadata (`execution_metadata.json`)
+14. Verifying audit events are visible in the admin Audit Log for each governance action
 
-This is a system test — not UI, not API — covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, and download endpoint.
+This is a system test — not UI, not API — covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, download endpoint, and audit ledger.
 
 ### Stack dependencies
 

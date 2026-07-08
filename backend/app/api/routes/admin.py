@@ -1,18 +1,21 @@
 import uuid
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.auth.policy import PolicyError, require_capability
 from app.db.session import get_db
 from app.models.analysis_bundle import AnalysisBundle
+from app.models.audit_event import AuditEventType
 from app.models.capability import Capability
 from app.models.data_resource import DataResource
 from app.models.execution_environment import ExecutionEnvironment
 from app.models.user import User
 from app.schemas.analysis_bundle import AnalysisBundleRead
+from app.schemas.audit_event import AuditEventList
 from app.schemas.data_resource import DataResourceRead
 from app.schemas.execution_environment import ExecutionEnvironmentRead
 from app.schemas.execution_request import ExecutionRequestRead
@@ -23,6 +26,7 @@ from app.services.analysis_bundle_service import (
     get_environment_runtime,
     get_resource_identifiers,
 )
+from app.services.audit_service import create_audit_event, query_audit_events
 from app.services.execution_request_service import (
     get_execution_request,
     list_execution_requests,
@@ -367,6 +371,15 @@ def post_admin_approve_output_set(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.OUTPUT_SET_APPROVED,
+        actor_id=current_user.id,
+        project_id=output_set.execution_request.project_id,
+        resource_type="output_set",
+        resource_id=output_set.id,
+        metadata={},
+    )
     db.commit()
     db.refresh(output_set)
     req = output_set.execution_request
@@ -422,6 +435,15 @@ def post_admin_reject_output_set(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.OUTPUT_SET_REJECTED,
+        actor_id=current_user.id,
+        project_id=output_set.execution_request.project_id,
+        resource_type="output_set",
+        resource_id=output_set.id,
+        metadata={},
+    )
     db.commit()
     db.refresh(output_set)
     req = output_set.execution_request
@@ -477,6 +499,18 @@ def post_admin_release_output_set(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.OUTPUT_SET_RELEASED,
+        actor_id=current_user.id,
+        project_id=output_set.execution_request.project_id,
+        resource_type="output_set",
+        resource_id=output_set.id,
+        metadata={
+            "file_count": len(output_set.outputs) if output_set.outputs else 0,
+            "total_size_bytes": output_set.release_package_size or 0,
+        },
+    )
     db.commit()
     db.refresh(output_set)
     req = output_set.execution_request
@@ -570,8 +604,57 @@ def post_admin_user(
         display_name=data.display_name,
         password=data.password,
         role=data.role,
+        actor_id=current_user.id,
     )
     return user
+
+
+# --- Audit event query ---
+
+
+@router.get("/admin/audit-events", response_model=AuditEventList)
+def get_admin_audit_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    project_id: Optional[uuid.UUID] = Query(None),
+    actor_id: Optional[uuid.UUID] = Query(None),
+    resource_type: Optional[str] = Query(None),
+    resource_id: Optional[uuid.UUID] = Query(None),
+    event_type: Optional[str] = Query(None),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
+):
+    try:
+        require_capability(current_user, Capability.BUNDLE_REVIEW)
+    except PolicyError:
+        try:
+            require_capability(current_user, Capability.OUTPUT_REVIEW)
+        except PolicyError:
+            try:
+                require_capability(current_user, Capability.USER_MANAGE)
+            except PolicyError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=str(e),
+                )
+
+    items, total = query_audit_events(
+        db,
+        project_id=project_id,
+        actor_id=actor_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        event_type=event_type,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+        order=order,
+    )
+    return AuditEventList(items=items, total=total, limit=limit, offset=offset)
 
 
 def _admin_bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
@@ -635,6 +718,15 @@ def post_admin_approve_bundle(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.BUNDLE_APPROVED,
+        actor_id=current_user.id,
+        project_id=bundle.project_id,
+        resource_type="analysis_bundle",
+        resource_id=bundle.id,
+        metadata={"bundle_name": bundle.name},
+    )
     db.commit()
     db.refresh(bundle)
     return _admin_bundle_to_read(bundle)
@@ -664,6 +756,15 @@ def post_admin_reject_bundle(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.BUNDLE_REJECTED,
+        actor_id=current_user.id,
+        project_id=bundle.project_id,
+        resource_type="analysis_bundle",
+        resource_id=bundle.id,
+        metadata={"bundle_name": bundle.name},
+    )
     db.commit()
     db.refresh(bundle)
     return _admin_bundle_to_read(bundle)
@@ -694,6 +795,15 @@ def post_admin_supersede_bundle(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    create_audit_event(
+        db,
+        event_type=AuditEventType.BUNDLE_SUPERSEDED,
+        actor_id=current_user.id,
+        project_id=bundle.project_id,
+        resource_type="analysis_bundle",
+        resource_id=bundle.id,
+        metadata={"bundle_name": bundle.name},
+    )
     db.commit()
     db.refresh(bundle)
     return _admin_bundle_to_read(bundle)

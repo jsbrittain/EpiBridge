@@ -6,6 +6,12 @@ from app.models.analysis_bundle import (
     AnalysisBundleDataResource,
     AnalysisBundleStatus,
 )
+from app.models.audit_event import (
+    SYSTEM_USER_ID,
+    WORKER_USER_ID,
+    AuditEvent,
+    AuditEventType,
+)
 from app.models.build_request import BuildRequest, BuildRequestStatus
 from app.models.capability import Capability, CapabilityRecord, UserCapability
 from app.models.data_resource import DataResource
@@ -25,6 +31,10 @@ from app.models.user import User, UserRole
 __all__ = [
     "AIBundleReview",
     "AIBundleReviewStatus",
+    "AuditEvent",
+    "AuditEventType",
+    "SYSTEM_USER_ID",
+    "WORKER_USER_ID",
     "AnalysisBundle",
     "AnalysisBundleBuildStatus",
     "AnalysisBundleDataResource",
