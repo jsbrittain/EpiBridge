@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime
 from typing import List
 
 from fastapi import (
@@ -169,13 +170,32 @@ def post_project_resources(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Data resources not found: {', '.join(sorted(missing))}",
         )
-    existing = {r.identifier for r in project.data_resources}
+    existing_resources = {
+        a.data_resource_id
+        for a in db.query(ProjectResourceAllocation).filter(
+            ProjectResourceAllocation.project_id == project.id,
+            ProjectResourceAllocation.revoked_at.is_(None),
+        )
+    }
     for r in resources:
-        if r.identifier not in existing:
-            project.data_resources.append(r)
+        if r.id not in existing_resources:
+            allocation = ProjectResourceAllocation(
+                project_id=project.id,
+                data_resource_id=r.id,
+                created_by_id=current_user.id,
+            )
+            db.add(allocation)
     db.commit()
-    db.refresh(project)
-    return project.data_resources
+
+    allocations = (
+        db.query(ProjectResourceAllocation)
+        .filter(
+            ProjectResourceAllocation.project_id == project.id,
+            ProjectResourceAllocation.revoked_at.is_(None),
+        )
+        .all()
+    )
+    return [a.data_resource for a in allocations]
 
 
 @router.delete(
@@ -194,6 +214,7 @@ def delete_project_resource(
         .filter(
             ProjectResourceAllocation.project_id == project_id,
             ProjectResourceAllocation.data_resource_id == resource_id,
+            ProjectResourceAllocation.revoked_at.is_(None),
         )
         .first()
     )
@@ -202,7 +223,8 @@ def delete_project_resource(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resource not attached to this project",
         )
-    db.delete(join)
+    join.revoked_by_id = current_user.id
+    join.revoked_at = datetime.utcnow()
     db.commit()
 
 

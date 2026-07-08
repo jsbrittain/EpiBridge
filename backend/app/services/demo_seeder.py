@@ -7,6 +7,7 @@ from app.models.analysis_bundle import (
 from app.models.data_resource import DataResource
 from app.models.execution_environment import ExecutionEnvironment
 from app.models.project import Project
+from app.models.project_data_resource import ProjectResourceAllocation
 from app.models.user import User
 from app.workflow.bundle import approve_bundle, submit_bundle
 
@@ -37,7 +38,9 @@ def seed_demo_workspace(db: Session) -> dict:
 
     project = Project(
         name=DEMO_PROJECT_NAME,
-        description="Dengue surveillance analysis demo for EpiBridge canonical workflow.",
+        description=(
+            "Dengue surveillance analysis demo for EpiBridge canonical workflow."
+        ),
         owner_id=admin.id,
     )
     db.add(project)
@@ -49,7 +52,12 @@ def seed_demo_workspace(db: Session) -> dict:
         .first()
     )
     if resource:
-        project.data_resources.append(resource)
+        allocation = ProjectResourceAllocation(
+            project_id=project.id,
+            data_resource_id=resource.id,
+            created_by_id=admin.id,
+        )
+        db.add(allocation)
 
     env = (
         db.query(ExecutionEnvironment)

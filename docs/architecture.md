@@ -393,12 +393,16 @@ variables directly without relying on volume mounts.
 
 ### Resource Manifests
 
-### Project Association
+### Project Resource Allocation
 
 A **Project** represents permission to analyse one or more Data Resources.
-Projects do not own resources — they reference them through a many-to-many
-relationship (`ProjectDataResource`). A single Data Resource may be associated
-with multiple projects over time.
+Projects do not own resources — the relationship is managed through
+`ProjectResourceAllocation`, a first-class domain object that records the
+institutional provisioning decision. Each allocation captures who authorised it
+(`created_by_id`), when it was created (`created_at`), and optionally when and
+by whom it was revoked (`revoked_by_id`, `revoked_at`). An allocation is active
+when `revoked_at IS NULL`. A single Data Resource may be associated with
+multiple projects over time via independent allocations.
 
 ⸻
 

@@ -125,7 +125,9 @@ class TestGetProjectResources:
 
     def test_resources_with_data(self, client, project, resource, db_session):
         link = ProjectResourceAllocation(
-            project_id=project.id, data_resource_id=resource.id
+            project_id=project.id,
+            data_resource_id=resource.id,
+            created_by_id=project.owner_id,
         )
         db_session.add(link)
         db_session.commit()
@@ -142,6 +144,32 @@ class TestGetProjectResources:
         response = client.get(f"/api/projects/{uuid.uuid4()}/resources")
         assert response.status_code == 404
 
+    def test_revoke_resource(
+        self,
+        client,
+        project,
+        resource,
+        db_session,
+    ):
+        link = ProjectResourceAllocation(
+            project_id=project.id,
+            data_resource_id=resource.id,
+            created_by_id=project.owner_id,
+        )
+        db_session.add(link)
+        db_session.commit()
+
+        response = client.get(f"/api/projects/{project.id}/resources")
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+        response = client.delete(f"/api/projects/{project.id}/resources/{resource.id}")
+        assert response.status_code == 204
+
+        response = client.get(f"/api/projects/{project.id}/resources")
+        assert response.status_code == 200
+        assert response.json() == []
+
 
 class TestGetProjectBundles:
     def test_bundles_empty(self, client, project):
@@ -153,7 +181,9 @@ class TestGetProjectBundles:
         self, client, project, resource, execution_environment, db_session
     ):
         link = ProjectResourceAllocation(
-            project_id=project.id, data_resource_id=resource.id
+            project_id=project.id,
+            data_resource_id=resource.id,
+            created_by_id=project.owner_id,
         )
         db_session.add(link)
 
@@ -299,6 +329,13 @@ class TestUpdateProjectBundle:
     def test_update_resources(
         self, client, project, resource, execution_environment, db_session
     ):
+        allocation = ProjectResourceAllocation(
+            project_id=project.id,
+            data_resource_id=resource.id,
+            created_by_id=project.owner_id,
+        )
+        db_session.add(allocation)
+
         bundle = AnalysisBundle(
             project_id=project.id,
             created_by_id=project.owner_id,
