@@ -292,7 +292,7 @@ Logging is configured centrally at startup via `app.core.logging.configure_loggi
 - **Log level** is controlled by the `LOG_LEVEL` environment variable (default `INFO`). Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
 - **Format**: `%(asctime)s [%(levelname)s] %(name)s: %(message)s` with UTC timestamps.
 - **Output**: stderr via Python's `StreamHandler` (compatible with container logging).
-- **Module loggers**: Alembic, SQLAlchemy engine, and Uvicorn access logs default to `WARN` to reduce noise.
+- **Module loggers**: Alembic, `asyncio`, SQLAlchemy engine, Uvicorn, and Uvicorn access logs default to `WARN` to reduce noise.
 
 ### Exception Handling
 
@@ -301,21 +301,22 @@ Three global exception handlers provide a safety net for unhandled exceptions:
 | Exception | HTTP Status | Response Body |
 |---|---|---|
 | `PolicyError` | 403 | `{"detail": "Forbidden"}` |
-| `ValueError` | 422 | `{"detail": "<message>"}` |
+| `ValueError` | 422 | `{"detail": "Invalid request."}` (logged at WARNING) |
 | `Exception` (fallback) | 500 | `{"detail": "Internal Server Error"}` (logged at ERROR) |
 
-These are fallback handlers. Route-specific error handling (404s, 401s, 422s from service-layer `ValueError` catch blocks) takes precedence. The global `Exception` handler ensures no unhandled exception leaks internal details to the client.
+These are fallback handlers. Route-specific error handling (404s, 401s, 422s from service-layer `ValueError` catch blocks) takes precedence. The global `ValueError` handler returns a generic message to avoid leaking internal implementation details. The global `Exception` handler ensures no unhandled exception leaks internal details to the client.
 
 ### Health Check
 
 `GET /api/health` returns platform operational status:
 
 ```json
-{"status": "ok", "database": "connected"}
+{"status": "ok", "database": "connected", "redis": "connected"}
 ```
 
 - **`status`**: `"ok"` when all dependencies are healthy, `"degraded"` otherwise.
 - **`database`**: `"connected"` or `"disconnected"` based on a live `SELECT 1` query.
+- **`redis`**: `"connected"` or `"disconnected"` based on a `PING` command.
 - No authentication required. No internal implementation details exposed.
 
 ### Request Logging
@@ -464,6 +465,16 @@ deployment provisions matching ownership: `cloud-init.yaml` creates `/var/lib/ep
 owned by UID 1000, and `scripts/bootstrap.sh` applies the same ownership at setup time.
 The container's `epibridge` user uses a matching UID (1000) so that volume-mounted storage
 directories are writable without runtime permission workarounds or world-writable fallbacks.
+
+### Worker resilience
+
+The worker (`worker/worker/main.py`) runs as a single-threaded infinite polling loop. Three resilience mechanisms are built in:
+
+- **Database connection backoff**: On connection failure, the worker retries with exponential backoff (1s, 2s, 4s, ..., max 60s). Backoff resets to 1s on successful connection.
+- **Outer catch-all**: Any unexpected exception during polling is logged with a full traceback; the loop continues.
+- **Graceful shutdown**: `SIGTERM` and `SIGINT` are handled. The current iteration completes (including any in-flight build or execution), then the loop exits. In-flight containers are left for Docker to manage.
+
+The worker polls `BuildRequest` (PENDING) first, then `ExecutionRequest` (PENDING), within each poll cycle.
 
 ### Stack dependencies
 

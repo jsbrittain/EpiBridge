@@ -26,6 +26,11 @@ _LOG_CONFIG = {
             "handlers": ["console"],
             "propagate": False,
         },
+        "asyncio": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": False,
+        },
         "sqlalchemy.engine": {
             "level": "WARN",
             "handlers": ["console"],

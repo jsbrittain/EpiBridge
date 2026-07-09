@@ -1,6 +1,5 @@
 import io
 import os
-import stat
 import tarfile
 from pathlib import Path
 

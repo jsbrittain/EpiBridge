@@ -96,9 +96,12 @@ def policy_error_handler(request: Request, exc: PolicyError) -> JSONResponse:
 
 @app.exception_handler(ValueError)
 def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    logger.warning(
+        "Unhandled ValueError on %s %s: %s", request.method, request.url.path, exc
+    )
     return JSONResponse(
         status_code=422,
-        content={"detail": str(exc)},
+        content={"detail": "Invalid request."},
     )
 
 

@@ -1,8 +1,5 @@
-import uuid
-
-import pytest
-
 import os
+import uuid
 
 import pytest
 

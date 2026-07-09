@@ -5,11 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from unittest.mock import patch
-
 from app.services.bundle_store import (
     LocalFileSystemBundleStore,
-    get_bundle_store,
 )
 
 

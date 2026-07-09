@@ -53,7 +53,7 @@ router = APIRouter()
 def _require_capability(current_user: User, capability: Capability) -> None:
     try:
         require_capability(current_user, capability)
-    except PolicyError as e:
+    except PolicyError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
