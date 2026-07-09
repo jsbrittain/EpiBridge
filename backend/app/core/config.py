@@ -35,7 +35,6 @@ class Settings(BaseSettings):
             )
         return v
 
-    auto_create_schema: bool = True
     auto_register_resources: bool = True
     resource_manifest_dir: str = ""
     auto_register_environments: bool = True
@@ -67,7 +66,7 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

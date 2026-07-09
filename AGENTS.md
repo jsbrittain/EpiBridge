@@ -1,13 +1,13 @@
 # AGENTS.md
 
-## Project status — Milestone 17 complete (Audit & Provenance)
+## Project status — Milestone 18 Phase 5 complete (Production Database Migration)
 
 ### Exists and functional
 
 ```
 backend/         FastAPI: identity model (User, Role, Capability,
                  ProjectMembership), capability-based policy, SQLAlchemy,
-                 Alembic-ready, config, Local Identity Provider auth,
+                 Alembic, config, Local Identity Provider auth,
                  CLI seed-admin/seed-demo, bundle store, worker execution,
                  Environment Builder subsystem, auth framework seeder,
                  user management API (create/list/get users), email validation,
@@ -247,19 +247,43 @@ Every `/api/admin/*` endpoint enforces a capability check. The requirements are:
 
 All project-scoped endpoints additionally enforce `require_project_membership` and appropriate capabilities (`project.manage`, `bundle.create`, `bundle.submit`, `execution.run`, `project.members.manage`, `project.resources.manage`).
 
-### Temporary development policy (domain model iteration phase)
+### Database Migrations (Alembic)
 
-While the core domain schema is still being discovered (Projects, Jobs, Outputs, etc.):
+Alembic is the single authoritative mechanism for database schema management.
 
-- **SQLAlchemy models are the source of truth** for the database schema.
-- **No Alembic migrations are maintained.** Migration files are not generated or committed.
-- **Schema is auto-created** on backend startup via `Base.metadata.create_all()` when `AUTO_CREATE_SCHEMA=true` (default).
-- **Development databases are disposable.** Drop and recreate freely.
+**Migration workflow:**
 
-Once the core schema stabilises, Alembic will be reintroduced as a dedicated milestone:
-- A single initial migration will be generated from the stable schema.
-- All future schema changes will use Alembic migrations.
-- `AUTO_CREATE_SCHEMA` will be set to `false` in production-like environments.
+- **SQLAlchemy models remain the source of truth** — models define the schema, Alembic generates migrations from them.
+- The initial migration (`alembic/versions/`) was generated via `alembic revision --autogenerate` and represents the current schema.
+- All future schema changes require a new Alembic migration, never manual DDL or `create_all()`.
+
+**Developer workflow for schema changes:**
+
+1. Modify the SQLAlchemy model class.
+2. Run `alembic revision --autogenerate -m "Description of change"` from `backend/`.
+3. Review the generated migration file in `alembic/versions/`.
+4. Run `alembic upgrade head` to apply it.
+5. Verify with unit and integration tests.
+
+**Startup behaviour:**
+
+- On startup, the backend runs `alembic upgrade head` to ensure the database is at the current migration revision.
+- If the database is empty, all migrations are applied (fresh install).
+- If the database has tables but no `alembic_version` table (legacy `create_all`-generated schema), startup fails with a clear error. The operator must manually verify schema compatability and run `alembic stamp head`.
+
+**Deployment expectations:**
+
+- `upgrade.sh` and `restore.sh` run `alembic upgrade head` as part of their workflow.
+- Docker Compose does not run migrations explicitly; the application handles them at startup via the lifespan.
+- Always run `alembic upgrade head` before starting the application against a new database.
+
+**Migration policy:**
+
+During active development, the migration history is regularly squashed so that the repository contains a single migration representing the current schema.
+
+Once a version is released, migrations become part of the supported upgrade path between released versions.
+
+Migration history may be squashed again at a future major release when upgrades from earlier releases are no longer supported.
 
 ### Domain model boundary
 
@@ -285,9 +309,11 @@ make test         # run tests
 
 **Backend** (from `backend/`):
 - `pip install -e ".[dev]"` — install dependencies (including dev tools)
-- `uvicorn app.main:app --reload` — dev server (auto-creates schema on startup)
+- `uvicorn app.main:app --reload` — dev server (applies pending Alembic migrations on startup)
 - `python -m app.cli seed-admin` — seed admin user
 - `python -m app.cli seed-demo` — seed demo workspace (dev debugging tool)
+- `alembic upgrade head` — apply pending migrations
+- `alembic revision --autogenerate -m "description"` — generate a new migration from model changes
 
 **Infrastructure** (from repo root):
 - `./scripts/bootstrap.sh` — single entry point (clone → install → verify)

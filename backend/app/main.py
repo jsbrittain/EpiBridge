@@ -10,8 +10,8 @@ from app.api.routes.me import router as me_router
 from app.api.routes.projects import router as projects_router
 from app.auth.router import router as auth_router
 from app.core.config import settings
-from app.db.base import Base
-from app.db.session import SessionLocal, engine
+from app.db.migration import ensure_migrated
+from app.db.session import SessionLocal
 from app.services.environment_manifest_loader import load_environment_directory
 from app.services.execution_environment_service import (
     register_from_manifest as register_environments,
@@ -23,8 +23,7 @@ from app.services.session_service import cleanup_expired_sessions
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.auto_create_schema:
-        Base.metadata.create_all(bind=engine)
+    ensure_migrated()
 
     db: Session = SessionLocal()
     try:

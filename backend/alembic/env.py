@@ -12,6 +12,9 @@ sys.path.insert(0, str(BASE_DIR))
 from app.core.config import settings
 from app.db.base import Base
 
+# Import all model classes so they are registered with Base.metadata.
+import app.models  # noqa: F401
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
