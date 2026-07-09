@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.builders.registry import registry as builder_registry
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.execution.docker import DockerExecutor
 from app.models.analysis_bundle import AnalysisBundle, AnalysisBundleBuildStatus
@@ -26,7 +27,7 @@ from app.providers.types import ProviderType
 from app.services.audit_service import create_audit_event
 from app.services.bundle_store import get_bundle_store
 
-logging.basicConfig(level=logging.INFO)
+configure_logging(settings.log_level)
 logger = logging.getLogger("worker")
 
 OUTPUT_ROOT = Path(settings.output_dir)
@@ -101,7 +102,7 @@ def resolve_data_mounts(
         try:
             provider_type = ProviderType(dr.provider_type)
         except ValueError:
-            logger.warning(f"Unknown provider type: {dr.provider_type}")
+            logger.warning("Unknown provider type: %s", dr.provider_type)
             continue
         provider = registry.get(provider_type)
         runtime = provider.prepare_runtime(dr.endpoint)
@@ -401,7 +402,7 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         log_body += f"[exec] stderr:\n{result.stderr.rstrip()}\n"
 
     if result.exit_code != 0:
-        logger.error(f"Execution failed (exit {result.exit_code}): {result.stderr}")
+        logger.error("Execution failed (exit %s): %s", result.exit_code, result.stderr or "")
         request.log = (
             f"{preamble}\n"
             f"[{exec_end}] EXECUTION FAILED (exit code {result.exit_code})\n"
@@ -429,7 +430,7 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
                 register_set_output(db, output_set.id, relative, os.path.getsize(fpath))
                 output_count += 1
                 logger.info(
-                    f"Registered output: {relative} ({os.path.getsize(fpath)} bytes)"
+                    "Registered output: %s (%s bytes)", relative, os.path.getsize(fpath)
                 )
 
     request.log = (
@@ -462,17 +463,17 @@ def main():
             try:
                 pending_builds = get_pending_builds(db)
                 for build in pending_builds:
-                    logger.info(f"Processing build {build.id}")
+                    logger.info("Processing build %s", build.id)
                     process_build(db, build)
 
                 pending = get_pending_requests(db)
                 for request in pending:
-                    logger.info(f"Processing request {request.id}: {request.name}")
+                    logger.info("Processing request %s: %s", request.id, request.name)
                     execute_request(db, request)
             finally:
                 db.close()
         except Exception as e:
-            logger.error(f"Worker error: {e}")
+            logger.exception("Worker error")
         time.sleep(POLL_INTERVAL)
 
 

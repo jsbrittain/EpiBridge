@@ -1,15 +1,20 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.routes.admin import router as admin_router
 from app.api.routes.health import router as health_router
 from app.api.routes.me import router as me_router
 from app.api.routes.projects import router as projects_router
+from app.auth.policy import PolicyError
 from app.auth.router import router as auth_router
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db.migration import ensure_migrated
 from app.db.session import SessionLocal
 from app.services.environment_manifest_loader import load_environment_directory
@@ -20,16 +25,19 @@ from app.services.manifest_loader import load_directory
 from app.services.resource_registration import register_from_manifest
 from app.services.session_service import cleanup_expired_sessions
 
+logger = logging.getLogger("epibridge")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging(settings.log_level)
     ensure_migrated()
 
     db: Session = SessionLocal()
     try:
         cleaned = cleanup_expired_sessions(db)
         if cleaned:
-            pass  # session cleanup logged by the service
+            logger.info("Cleaned %d expired session(s)", cleaned)
     finally:
         db.close()
 
@@ -79,3 +87,40 @@ app.include_router(me_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+
+
+@app.exception_handler(PolicyError)
+def policy_error_handler(request: Request, exc: PolicyError) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+
+
+@app.exception_handler(ValueError)
+def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(Exception)
+def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+    )
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    logger.info(
+        "%s %s %s (%.0fms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration * 1000,
+    )
+    return response

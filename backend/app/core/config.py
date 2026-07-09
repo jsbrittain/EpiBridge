@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     image_registry_prefix: str = "epibridge/builds"
 
     release_dir: str = "/var/lib/epibridge/releases"
+    log_level: str = "INFO"
 
     execution_mem_limit: str = "4g"
     execution_cpu_limit: float = 2.0

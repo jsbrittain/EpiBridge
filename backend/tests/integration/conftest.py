@@ -22,6 +22,9 @@ def _setup_database():
     ensure_migrated()
     yield
     Base.metadata.drop_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        conn.execute(text("DROP TYPE IF EXISTS user_role"))
 
 
 @pytest.fixture(autouse=True)

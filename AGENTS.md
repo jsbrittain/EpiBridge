@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Project status — Milestone 18 Phase 5 complete (Production Database Migration)
+## Project status — Milestone 18 Phase 6 complete (Operational Hardening)
 
 ### Exists and functional
 
@@ -284,6 +284,47 @@ During active development, the migration history is regularly squashed so that t
 Once a version is released, migrations become part of the supported upgrade path between released versions.
 
 Migration history may be squashed again at a future major release when upgrades from earlier releases are no longer supported.
+
+### Logging
+
+Logging is configured centrally at startup via `app.core.logging.configure_logging()`.
+
+- **Log level** is controlled by the `LOG_LEVEL` environment variable (default `INFO`). Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
+- **Format**: `%(asctime)s [%(levelname)s] %(name)s: %(message)s` with UTC timestamps.
+- **Output**: stderr via Python's `StreamHandler` (compatible with container logging).
+- **Module loggers**: Alembic, SQLAlchemy engine, and Uvicorn access logs default to `WARN` to reduce noise.
+
+### Exception Handling
+
+Three global exception handlers provide a safety net for unhandled exceptions:
+
+| Exception | HTTP Status | Response Body |
+|---|---|---|
+| `PolicyError` | 403 | `{"detail": "Forbidden"}` |
+| `ValueError` | 422 | `{"detail": "<message>"}` |
+| `Exception` (fallback) | 500 | `{"detail": "Internal Server Error"}` (logged at ERROR) |
+
+These are fallback handlers. Route-specific error handling (404s, 401s, 422s from service-layer `ValueError` catch blocks) takes precedence. The global `Exception` handler ensures no unhandled exception leaks internal details to the client.
+
+### Health Check
+
+`GET /api/health` returns platform operational status:
+
+```json
+{"status": "ok", "database": "connected"}
+```
+
+- **`status`**: `"ok"` when all dependencies are healthy, `"degraded"` otherwise.
+- **`database`**: `"connected"` or `"disconnected"` based on a live `SELECT 1` query.
+- No authentication required. No internal implementation details exposed.
+
+### Request Logging
+
+An HTTP middleware logs each request after completion:
+
+- Method, path, response status code, and duration in milliseconds.
+- Request bodies and query parameters are never logged (sensitive data).
+- Logged at `INFO` level via the `epibridge` logger.
 
 ### Domain model boundary
 
