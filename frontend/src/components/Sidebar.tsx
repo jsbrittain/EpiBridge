@@ -21,6 +21,7 @@ function hasAdminAccess(capabilities: string[]): boolean {
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/projects", label: "Projects" },
+  { href: "/environments", label: "Environments" },
 ];
 
 export default function Sidebar() {

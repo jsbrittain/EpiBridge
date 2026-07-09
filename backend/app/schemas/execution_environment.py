@@ -26,7 +26,6 @@ class ExecutionEnvironmentRead(BaseModel):
     description: str
     status: str
     image_reference: str
-    definition_path: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -36,3 +35,7 @@ class ExecutionEnvironmentRead(BaseModel):
         return _display_name(self.runtime)
 
     model_config = {"from_attributes": True}
+
+
+class ExecutionEnvironmentAdminRead(ExecutionEnvironmentRead):
+    definition_path: str | None = None

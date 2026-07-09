@@ -37,7 +37,6 @@ from app.schemas.analysis_bundle import (
     AnalysisBundleUpdate,
 )
 from app.schemas.data_resource import DataResourceRead
-from app.schemas.execution_environment import ExecutionEnvironmentRead
 from app.schemas.execution_request import (
     ExecutionRequestCreate,
     ExecutionRequestRead,
@@ -59,7 +58,6 @@ from app.services.analysis_bundle_service import (
 )
 from app.services.audit_service import create_audit_event
 from app.services.bundle_store import get_bundle_store
-from app.services.execution_environment_service import list_environments
 from app.services.execution_request_service import (
     create_execution_request,
     get_execution_request,
@@ -764,14 +762,3 @@ def delete_project_member(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Member not found",
         )
-
-
-@router.get(
-    "/execution-environments",
-    response_model=List[ExecutionEnvironmentRead],
-)
-def get_execution_environments(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    return list_environments(db, status="active")

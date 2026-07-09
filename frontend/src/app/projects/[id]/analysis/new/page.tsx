@@ -152,6 +152,16 @@ export default function CreateAnalysisPage() {
               </option>
             ))}
           </select>
+          {selectedEnvId && (
+            <Link
+              href={`/environments/${environments.find((e) => e.id === selectedEnvId)?.identifier ?? ""}`}
+              style={{ fontSize: "0.85rem", color: "var(--color-primary)", textDecoration: "none", marginTop: "var(--spacing-xs)", display: "inline-block" }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View environment details →
+            </Link>
+          )}
           {fieldErrors.environment && (
             <div style={{ color: "#e65100", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
               {fieldErrors.environment}
