@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -19,6 +20,20 @@ class Settings(BaseSettings):
     admin_email: str = "admin@epibridge.local"
     admin_password: str = "admin"
     session_ttl_seconds: int = 86400
+    max_session_ttl_seconds: int = 604800
+    secure_cookie: bool = False
+    rate_limit_max_attempts: int = 10
+    rate_limit_window_seconds: int = 300
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError(
+                "SECRET_KEY must be at least 32 characters. "
+                "Generate one with: openssl rand -base64 32"
+            )
+        return v
     auto_create_schema: bool = True
     auto_register_resources: bool = True
     resource_manifest_dir: str = ""

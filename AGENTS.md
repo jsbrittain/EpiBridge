@@ -319,6 +319,19 @@ make test         # run tests
 - `python -m pytest backend/tests/smoke -v` — smoke tests (requires full stack running)
 
 Integration tests use a dedicated `epibridge_test` PostgreSQL database for isolation.
+
+### Authentication configuration
+
+Key settings for deployment:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `SECRET_KEY` | (required) | Must be at least 32 characters. Generate with `openssl rand -base64 32`. |
+| `session_ttl_seconds` | 86400 (24h) | Per-session time-to-live. |
+| `max_session_ttl_seconds` | 604800 (7d) | Absolute maximum session lifetime (hard upper bound). |
+| `secure_cookie` | False | Set `true` when deploying behind TLS. |
+| `rate_limit_max_attempts` | 10 | Login attempts per window before rate limiting. |
+| `rate_limit_window_seconds` | 300 (5min) | Rate limit window. |
 The bootstrap process (`bootstrap.sh`) creates this database automatically.
 For local native runs, create it manually:
 ```

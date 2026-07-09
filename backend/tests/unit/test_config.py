@@ -1,4 +1,9 @@
+import pytest
+
 from app.core.config import Settings
+
+
+LONG_KEY = "a" * 32
 
 
 def test_settings_loads_with_minimal_env():
@@ -8,7 +13,7 @@ def test_settings_loads_with_minimal_env():
         postgres_host="localhost",
         postgres_db="epibridge",
         redis_password="test-redis",
-        secret_key="test-key",
+        secret_key=LONG_KEY,
     )
     assert s.postgres_host == "localhost"
     assert s.postgres_port == 5432
@@ -25,7 +30,7 @@ def test_settings_database_url_property():
         postgres_port=15432,
         postgres_db="custom_db",
         redis_password="rpw",
-        secret_key="sk",
+        secret_key=LONG_KEY,
     )
     assert s.database_url == "postgresql://custom:pw@db.example.com:15432/custom_db"
 
@@ -34,6 +39,16 @@ def test_settings_env_file_config():
     s = Settings(
         postgres_password="pw",
         redis_password="rpw",
-        secret_key="sk",
+        secret_key=LONG_KEY,
     )
     assert s.model_config.get("env_file") == ".env"
+
+
+def test_settings_short_secret_key_rejected():
+    with pytest.raises(ValueError, match="at least 32 characters"):
+        Settings(
+            _env_file=None,
+            postgres_password="pw",
+            redis_password="rpw",
+            secret_key="tooshort",
+        )

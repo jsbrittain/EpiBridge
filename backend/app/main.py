@@ -18,12 +18,21 @@ from app.services.execution_environment_service import (
 )
 from app.services.manifest_loader import load_directory
 from app.services.resource_registration import register_from_manifest
+from app.services.session_service import cleanup_expired_sessions
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.auto_create_schema:
         Base.metadata.create_all(bind=engine)
+
+    db: Session = SessionLocal()
+    try:
+        cleaned = cleanup_expired_sessions(db)
+        if cleaned:
+            pass  # session cleanup logged by the service
+    finally:
+        db.close()
 
     if settings.auto_register_resources:
         manifest_path = Path(settings.resource_manifest_dir)

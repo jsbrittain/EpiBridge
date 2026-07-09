@@ -282,7 +282,7 @@ class TestAdminCapabilities:
             json={
                 "email": "validated-admin@test.local",
                 "display_name": "Validated",
-                "password": "secret",
+                "password": "admin-secret",
                 "role": "admin",
             },
         )

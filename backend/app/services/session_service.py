@@ -13,6 +13,16 @@ def create_session(db: DBSession, user_id: str) -> Session:
     return session
 
 
+def cleanup_user_sessions(db: DBSession, user_id: str) -> int:
+    count = (
+        db.query(Session)
+        .filter(Session.user_id == user_id)
+        .delete(synchronize_session="fetch")
+    )
+    db.commit()
+    return count
+
+
 def get_valid_session(db: DBSession, session_id: str) -> Session | None:
     session = db.query(Session).filter(Session.id == session_id).first()
     if session is None:

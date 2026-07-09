@@ -157,7 +157,7 @@ class TestAdminUsers:
             json={
                 "email": "new@test.local",
                 "display_name": "New User",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "researcher",
             },
         )
@@ -176,11 +176,23 @@ class TestAdminUsers:
             json={
                 "email": "default@test.local",
                 "display_name": "Default Role",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 201
         assert response.json()["role"] == "researcher"
+
+    def test_create_user_short_password_rejected(self, client):
+        response = client.post(
+            "/api/admin/users",
+            json={
+                "email": "shortpw@test.local",
+                "display_name": "Short Password",
+                "password": "short",
+                "role": "researcher",
+            },
+        )
+        assert response.status_code == 422
 
     def test_create_user_duplicate_email(self, client, admin_user):
         response = client.post(
@@ -188,7 +200,7 @@ class TestAdminUsers:
             json={
                 "email": admin_user.email,
                 "display_name": "Duplicate",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 409
@@ -199,7 +211,7 @@ class TestAdminUsers:
             json={
                 "email": "should@fail.local",
                 "display_name": "Should Fail",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 403
@@ -224,7 +236,7 @@ class TestAdminUsers:
             json={
                 "email": "mod@test.local",
                 "display_name": "Moderator",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "moderator",
             },
         )
@@ -241,7 +253,7 @@ class TestAdminUsers:
             json={
                 "email": "maint@test.local",
                 "display_name": "Maintainer",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "maintainer",
             },
         )
@@ -257,7 +269,7 @@ class TestAdminUsers:
             json={
                 "email": "admin2@test.local",
                 "display_name": "Admin Two",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "admin",
             },
         )
