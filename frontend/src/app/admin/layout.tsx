@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getCurrentUser } from "@/lib/api";
-import type { User } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 
 interface AdminTab {
   href: string;
@@ -20,20 +18,12 @@ const adminTabs: AdminTab[] = [
   { href: "/admin/users", label: "Users", requiredCapability: "user.manage" },
 ];
 
-function hasCapability(user: User, capability: string): boolean {
-  return user.capabilities.includes(capability);
-}
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    getCurrentUser().then(setUser).catch(() => setUser(null));
-  }, []);
+  const { user } = useAuth();
 
   const visibleTabs = user !== null
-    ? adminTabs.filter((tab) => hasCapability(user, tab.requiredCapability))
+    ? adminTabs.filter((tab) => user.capabilities.includes(tab.requiredCapability))
     : [];
 
   const baseStyle: React.CSSProperties = {

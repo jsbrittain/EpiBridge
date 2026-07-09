@@ -80,7 +80,7 @@ class TestBundleStoreDecompressionBomb:
 
     def test_empty_archive_rejected(self, store):
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
+        with zipfile.ZipFile(buf, "w") as _:
             pass
         upload = _mock_upload(buf.getvalue())
         with pytest.raises(ValueError, match="empty"):

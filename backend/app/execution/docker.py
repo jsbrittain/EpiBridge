@@ -165,6 +165,7 @@ class DockerExecutor(Executor):
                 total_size += member.size
                 if total_size > MAX_EXTRACT_SIZE:
                     raise ValueError(
-                        f"Output archive exceeds maximum size of {MAX_EXTRACT_SIZE} bytes"
+                        f"Output archive exceeds maximum size of "
+                        f"{MAX_EXTRACT_SIZE} bytes"
                     )
             tar.extractall(path=str(output_dir))

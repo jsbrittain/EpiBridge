@@ -58,18 +58,6 @@ from app.services.analysis_bundle_service import (
     update_bundle,
 )
 from app.services.audit_service import create_audit_event
-
-
-def _require_capability(current_user: User, capability: Capability) -> None:
-    try:
-        require_capability(current_user, capability)
-    except PolicyError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden",
-        )
-
-
 from app.services.bundle_store import get_bundle_store
 from app.services.execution_environment_service import list_environments
 from app.services.execution_request_service import (
@@ -91,6 +79,17 @@ from app.services.project_service import (
     remove_member,
 )
 from app.workflow.bundle import submit_bundle
+
+
+def _require_capability(current_user: User, capability: Capability) -> None:
+    try:
+        require_capability(current_user, capability)
+    except PolicyError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
 
 router = APIRouter()
 

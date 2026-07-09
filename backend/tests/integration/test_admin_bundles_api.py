@@ -161,7 +161,7 @@ class TestAdminBundlesAPI:
         _allocated_resource(
             db_session, project, admin_user, "test-resource", "test_resource"
         )
-        r2 = _allocated_resource(
+        _allocated_resource(
             db_session, project, admin_user, "second-resource", "second"
         )
 

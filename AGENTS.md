@@ -476,6 +476,21 @@ The worker (`worker/worker/main.py`) runs as a single-threaded infinite polling 
 
 The worker polls `BuildRequest` (PENDING) first, then `ExecutionRequest` (PENDING), within each poll cycle.
 
+### Future refactoring — Authentication flow
+
+The frontend `request()` helper currently combines transport responsibilities
+(HTTP requests, timeout handling, response parsing) with application navigation
+(session-expiry redirect).
+
+A future refactoring should move session-expiry handling into the authentication
+layer (e.g. `AuthProvider` or a central authentication/session manager), leaving
+`request()` responsible only for transport concerns.
+
+At that point the API helper would report authentication failures, while the
+authentication layer would decide whether to redirect, re-authenticate or present
+an appropriate user experience. This would eliminate the need for route-specific
+guards such as the current `/login` pathname check.
+
 ### Stack dependencies
 
 Backend requires Python 3.11+. No other language runtimes or build tools have been installed. Stand up each package independently before wiring integration tests.

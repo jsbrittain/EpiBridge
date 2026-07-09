@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/AuthContext";
 import {
   OutputSetListItem,
   AuditEvent,
@@ -45,6 +46,7 @@ function statusBadge(status: string): { background: string; color: string; label
 }
 
 export default function AdminOutputsPage() {
+  const { user } = useAuth();
   const [sets, setSets] = useState<OutputSetListItem[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedOutputs, setExpandedOutputs] = useState<{ filename: string; size: number }[]>([]);
@@ -170,7 +172,7 @@ export default function AdminOutputsPage() {
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: "var(--spacing-xs)" }}>
-                          {s.status === "pending_review" && (
+                          {s.status === "pending_review" && user?.capabilities.includes("output.review") && (
                             <>
                               <button
                                 className="btn btn-sm"
@@ -188,7 +190,7 @@ export default function AdminOutputsPage() {
                               </button>
                             </>
                           )}
-                          {s.status === "approved" && (
+                          {s.status === "approved" && user?.capabilities.includes("output.release") && (
                             <button
                               className="btn btn-sm"
                               style={{ background: "var(--color-primary, #1976d2)", color: "#fff", border: "none" }}

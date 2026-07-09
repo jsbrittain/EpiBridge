@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getCurrentUser } from "@/lib/api";
-import type { User } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import styles from "./Sidebar.module.css";
 
 const adminCapabilities = [
@@ -16,8 +14,8 @@ const adminCapabilities = [
   "environment.manage",
 ];
 
-function hasAdminAccess(user: User): boolean {
-  return user.capabilities.some((c) => adminCapabilities.includes(c));
+function hasAdminAccess(capabilities: string[]): boolean {
+  return capabilities.some((c) => adminCapabilities.includes(c));
 }
 
 const links = [
@@ -27,13 +25,10 @@ const links = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAuth();
 
-  useEffect(() => {
-    getCurrentUser().then(setUser).catch(() => setUser(null));
-  }, []);
-
-  const showAdmin = user !== null && hasAdminAccess(user);
+  const showAdmin =
+    user !== null && hasAdminAccess(user.capabilities);
 
   return (
     <aside className={styles.sidebar}>
