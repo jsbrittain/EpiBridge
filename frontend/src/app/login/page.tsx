@@ -1,35 +1,35 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, login } from "@/lib/api";
+import { login } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    getCurrentUser()
-      .then(() => router.push("/"))
-      .catch(() => setLoading(false));
-  }, [router]);
+  if (user) {
+    router.push("/");
+    return null;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     try {
       await login(email, password);
+      await refresh();
       router.push("/");
     } catch {
       setError("Invalid email or password");
+      setSubmitting(false);
     }
-  }
-
-  if (loading) {
-    return null;
   }
 
   return (
@@ -104,8 +104,9 @@ export default function LoginPage() {
             type="submit"
             className="btn btn-primary"
             style={{ width: "100%", justifyContent: "center" }}
+            disabled={submitting}
           >
-            Sign in
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>

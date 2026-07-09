@@ -35,6 +35,9 @@ jobs:
         cd backend
         python -m pytest tests/unit -v --cov=app --cov-report=term-missing
 
+    - name: Create storage directories
+      run: sudo mkdir -p /var/lib/epibridge/{bundles,outputs,releases} /var/log/epibridge && sudo chown -R 1000:1000 /var/lib/epibridge /var/log/epibridge
+
     - name: Bootstrap EpiBridge
       run: make ci
 
@@ -43,7 +46,7 @@ jobs:
         cd frontend
         npm ci
         npx playwright install --with-deps chromium
-        npx playwright test
+        ADMIN_PASSWORD=$(grep ^ADMIN_PASSWORD= ../.env | sed 's/^ADMIN_PASSWORD=//') npx playwright test
 
     - name: Collect logs on failure
       if: failure()

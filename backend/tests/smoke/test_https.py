@@ -1,4 +1,4 @@
-import httpx2 as httpx
+import httpx
 
 
 def test_health_endpoint_over_https():
@@ -8,4 +8,6 @@ def test_health_endpoint_over_https():
         timeout=10,
     )
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"

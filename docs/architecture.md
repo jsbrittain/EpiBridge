@@ -172,7 +172,7 @@ Local Sensitive Data
 
 - FastAPI
 - SQLAlchemy
-- Alembic (planned for schema stabilisation)
+- Alembic
 
 ### Authentication
 
@@ -649,7 +649,7 @@ Output files are written to the execution container's local `/output` directory 
 1. Retrieves them via the Docker API (`get_archive`) — a **pull** operation from inside the container (trust boundary preserved)
 2. Persists them to a shared filesystem volume at `/outputs/{execution_request_id}/{filename}`
 3. Creates an `OutputSet` record and registers each file as an `Output` record linked to that set
-4. Release Packages are written to `/tmp/epibridge-releases/` during the Release transition
+4. Release Packages are written to `/var/lib/epibridge/releases/` during the Release transition
 
 ---
 
@@ -832,6 +832,52 @@ The canonical workflow demonstrates the complete governed lifecycle from a resea
 
 The canonical workflow is validated by the Playwright e2e test in `frontend/e2e/canonical-workflow.spec.ts`. It is a system test covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, and download endpoint.
 
+---
+
+## Operational Behaviour
+
+### Logging
+
+Logging is configured centrally at startup by `configure_logging()` in `app.core.logging`. The configuration uses Python's `logging.config.dictConfig`:
+
+- **Output**: stderr via `StreamHandler` (compatible with container log aggregation).
+- **Format**: `%(asctime)s [%(levelname)s] %(name)s: %(message)s` with UTC timestamps.
+- **Level**: Controlled by `LOG_LEVEL` environment variable (default `INFO`).
+- **Noise suppression**: `alembic`, `asyncio`, `sqlalchemy.engine`, `uvicorn`, and `uvicorn.access` loggers default to `WARN` to reduce framework noise.
+
+No request bodies, response bodies, authentication tokens, session identifiers, or researcher data are logged.
+
+### Health Checks
+
+`GET /api/health` is an unauthenticated endpoint that verifies platform dependencies:
+
+- **PostgreSQL**: Executes `SELECT 1` via a live database session.
+- **Redis**: Connects and issues `PING` with a 3-second socket timeout.
+
+If all dependencies respond, `status` is `"ok"`. If any dependency is unreachable, `status` is `"degraded"` and the affected field is reported as `"disconnected"`. No internal implementation details are exposed.
+
+### Exception Handling
+
+Three global exception handlers provide a safety net for unexpected failures:
+
+| Exception | HTTP Status | Response Body | Logged At |
+|-----------|-------------|---------------|-----------|
+| `PolicyError` | 403 | `{"detail": "Forbidden"}` | — |
+| `ValueError` | 422 | `{"detail": "Invalid request."}` | WARNING |
+| `Exception` (fallback) | 500 | `{"detail": "Internal Server Error"}` | ERROR (with traceback) |
+
+Route-specific error handling takes precedence. The global handlers only fire when exceptions escape route-level catch blocks.
+
+### Worker Resilience
+
+The worker runs as a single-threaded polling loop that processes `BuildRequest` and `ExecutionRequest` items in FIFO order. Three resilience mechanisms prevent the worker from crashing or leaking work:
+
+1. **Database connection backoff**: If the database is unreachable, the worker retries with exponential backoff (1s, 2s, 4s, ..., max 60s). Backoff resets on successful connection.
+2. **Outer catch-all**: Any unexpected exception during a poll cycle is logged with a full traceback. The loop continues to the next cycle.
+3. **Graceful shutdown**: `SIGTERM` and `SIGINT` cause the worker to complete its current iteration (including any in-flight build or execution) before exiting. Running containers are left for Docker to manage.
+
+Items that fail during processing are transitioned to `FAILED` status in the database. They remain visible to operators through the admin API and are not silently retried.
+
 Identity validation (capability boundaries for each role) is maintained as separate integration tests.
 
 ---
@@ -857,16 +903,11 @@ Identity validation (capability boundaries for each role) is maintained as separ
 
 ## Future Direction
 
-### Near-term
+### Post-MVP
 
-- Alembic migrations (once the core schema stabilises)
-- Role and capability management UI
-- Audit trail implementation
-
-### Longer-term
-
-- OIDC / enterprise IAM integration
 - Pagination on list endpoints
+- Role and capability management UI (read-only currently available)
+- OIDC / enterprise IAM integration
 - Statistical disclosure control automation
 - Kubernetes execution backend
 - Federation (cross-institution analysis)

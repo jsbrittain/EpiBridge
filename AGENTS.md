@@ -1,13 +1,13 @@
 # AGENTS.md
 
-## Project status — Milestone 17 complete (Audit & Provenance)
+## Project status — Milestone 18 Phase 6 complete (Operational Hardening)
 
 ### Exists and functional
 
 ```
 backend/         FastAPI: identity model (User, Role, Capability,
                  ProjectMembership), capability-based policy, SQLAlchemy,
-                 Alembic-ready, config, Local Identity Provider auth,
+                 Alembic, config, Local Identity Provider auth,
                  CLI seed-admin/seed-demo, bundle store, worker execution,
                  Environment Builder subsystem, auth framework seeder,
                  user management API (create/list/get users), email validation,
@@ -61,6 +61,11 @@ Single monorepo. Do not add top-level directories without justification.
 - **Capability-based authorisation**: policy checks `require_capability()`, not roles
 - **Project Membership scoping**: access requires membership + capability
 - Audit trail required for all actions
+- Execution containers run with: `cap_drop=["ALL"]`, read-only rootfs, `no-new-privileges`,
+  tmpfs for `/tmp` and `/output`, disabled networking, and configurable resource limits
+  (`execution_mem_limit`, `execution_cpu_limit`, `execution_pids_limit`, `max_output_size_mb`)
+- All archives (bundle uploads, container outputs) are treated as untrusted:
+  symlinks rejected, path traversal blocked, decompression size limited
 
 ### Identity model
 
@@ -220,19 +225,107 @@ The policy layer (`app.auth.policy`) exposes three functions:
 
 Policy is entirely capability-based. Roles are never consulted by the policy layer.
 
-### Temporary development policy (domain model iteration phase)
+### Admin endpoint capability requirements (enforced server-side)
 
-While the core domain schema is still being discovered (Projects, Jobs, Outputs, etc.):
+Every `/api/admin/*` endpoint enforces a capability check. The requirements are:
 
-- **SQLAlchemy models are the source of truth** for the database schema.
-- **No Alembic migrations are maintained.** Migration files are not generated or committed.
-- **Schema is auto-created** on backend startup via `Base.metadata.create_all()` when `AUTO_CREATE_SCHEMA=true` (default).
-- **Development databases are disposable.** Drop and recreate freely.
+| Endpoint | Required Capability |
+|---|---|
+| `GET /admin/resources`, `GET /admin/resources/{id}` | `data.manage` |
+| `GET /admin/execution-environments`, `GET /admin/execution-environments/{id}` | `environment.manage` |
+| `GET /admin/bundles`, `GET /admin/bundles/{id}` | Tiered: `bundle.review` / `output.review` / `user.manage` |
+| `GET /admin/execution-requests`, `GET /admin/execution-requests/{id}` | Tiered: `bundle.review` / `output.review` / `user.manage` |
+| `GET /admin/output-sets`, `GET /admin/output-sets/{id}` | `output.review` |
+| `GET /admin/execution-requests/{id}/outputs` | `output.review` |
+| `GET /admin/outputs/{id}` | `output.review` |
+| `GET /admin/users`, `GET /admin/users/{id}`, `POST /admin/users` | `user.manage` |
+| `GET /admin/audit-events` | Tiered: `bundle.review` / `output.review` / `user.manage` |
+| `POST /admin/bundles/{id}/approve`, `/reject` | `bundle.review` |
+| `POST /admin/bundles/{id}/supersede` | `bundle.review` (unless owner) |
+| `POST /admin/output-sets/{id}/approve`, `/reject` | `output.review` |
+| `POST /admin/output-sets/{id}/release` | `output.release` |
 
-Once the core schema stabilises, Alembic will be reintroduced as a dedicated milestone:
-- A single initial migration will be generated from the stable schema.
-- All future schema changes will use Alembic migrations.
-- `AUTO_CREATE_SCHEMA` will be set to `false` in production-like environments.
+All project-scoped endpoints additionally enforce `require_project_membership` and appropriate capabilities (`project.manage`, `bundle.create`, `bundle.submit`, `execution.run`, `project.members.manage`, `project.resources.manage`).
+
+### Database Migrations (Alembic)
+
+Alembic is the single authoritative mechanism for database schema management.
+
+**Migration workflow:**
+
+- **SQLAlchemy models remain the source of truth** — models define the schema, Alembic generates migrations from them.
+- The initial migration (`alembic/versions/`) was generated via `alembic revision --autogenerate` and represents the current schema.
+- All future schema changes require a new Alembic migration, never manual DDL or `create_all()`.
+
+**Developer workflow for schema changes:**
+
+1. Modify the SQLAlchemy model class.
+2. Run `alembic revision --autogenerate -m "Description of change"` from `backend/`.
+3. Review the generated migration file in `alembic/versions/`.
+4. Run `alembic upgrade head` to apply it.
+5. Verify with unit and integration tests.
+
+**Startup behaviour:**
+
+- On startup, the backend runs `alembic upgrade head` to ensure the database is at the current migration revision.
+- If the database is empty, all migrations are applied (fresh install).
+- If the database has tables but no `alembic_version` table (legacy `create_all`-generated schema), startup fails with a clear error. The operator must manually verify schema compatability and run `alembic stamp head`.
+
+**Deployment expectations:**
+
+- `upgrade.sh` and `restore.sh` run `alembic upgrade head` as part of their workflow.
+- Docker Compose does not run migrations explicitly; the application handles them at startup via the lifespan.
+- Always run `alembic upgrade head` before starting the application against a new database.
+
+**Migration policy:**
+
+During active development, the migration history is regularly squashed so that the repository contains a single migration representing the current schema.
+
+Once a version is released, migrations become part of the supported upgrade path between released versions.
+
+Migration history may be squashed again at a future major release when upgrades from earlier releases are no longer supported.
+
+### Logging
+
+Logging is configured centrally at startup via `app.core.logging.configure_logging()`.
+
+- **Log level** is controlled by the `LOG_LEVEL` environment variable (default `INFO`). Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
+- **Format**: `%(asctime)s [%(levelname)s] %(name)s: %(message)s` with UTC timestamps.
+- **Output**: stderr via Python's `StreamHandler` (compatible with container logging).
+- **Module loggers**: Alembic, `asyncio`, SQLAlchemy engine, Uvicorn, and Uvicorn access logs default to `WARN` to reduce noise.
+
+### Exception Handling
+
+Three global exception handlers provide a safety net for unhandled exceptions:
+
+| Exception | HTTP Status | Response Body |
+|---|---|---|
+| `PolicyError` | 403 | `{"detail": "Forbidden"}` |
+| `ValueError` | 422 | `{"detail": "Invalid request."}` (logged at WARNING) |
+| `Exception` (fallback) | 500 | `{"detail": "Internal Server Error"}` (logged at ERROR) |
+
+These are fallback handlers. Route-specific error handling (404s, 401s, 422s from service-layer `ValueError` catch blocks) takes precedence. The global `ValueError` handler returns a generic message to avoid leaking internal implementation details. The global `Exception` handler ensures no unhandled exception leaks internal details to the client.
+
+### Health Check
+
+`GET /api/health` returns platform operational status:
+
+```json
+{"status": "ok", "database": "connected", "redis": "connected"}
+```
+
+- **`status`**: `"ok"` when all dependencies are healthy, `"degraded"` otherwise.
+- **`database`**: `"connected"` or `"disconnected"` based on a live `SELECT 1` query.
+- **`redis`**: `"connected"` or `"disconnected"` based on a `PING` command.
+- No authentication required. No internal implementation details exposed.
+
+### Request Logging
+
+An HTTP middleware logs each request after completion:
+
+- Method, path, response status code, and duration in milliseconds.
+- Request bodies and query parameters are never logged (sensitive data).
+- Logged at `INFO` level via the `epibridge` logger.
 
 ### Domain model boundary
 
@@ -258,9 +351,11 @@ make test         # run tests
 
 **Backend** (from `backend/`):
 - `pip install -e ".[dev]"` — install dependencies (including dev tools)
-- `uvicorn app.main:app --reload` — dev server (auto-creates schema on startup)
+- `uvicorn app.main:app --reload` — dev server (applies pending Alembic migrations on startup)
 - `python -m app.cli seed-admin` — seed admin user
 - `python -m app.cli seed-demo` — seed demo workspace (dev debugging tool)
+- `alembic upgrade head` — apply pending migrations
+- `alembic revision --autogenerate -m "description"` — generate a new migration from model changes
 
 **Infrastructure** (from repo root):
 - `./scripts/bootstrap.sh` — single entry point (clone → install → verify)
@@ -284,12 +379,32 @@ make test         # run tests
 - `make fix` — auto-fix all fixable issues (run this most often)
 
 **Testing** (from repo root):
-- `make test` — run unit, integration, and smoke test suites (CI compatible)
-- `make dev-test` — run full suite inside the container via SSH (requires dev stack)
+- `make dev-test` — run full suite inside the container via SSH (recommended developer workflow; requires OrbStack VM + Docker stack)
+- `make test` — run unit, integration, and smoke test suites natively (requires PostgreSQL + Redis on localhost; the `epibridge_test` database must exist)
 - `make playwright` — run canonical workflow e2e test (requires full stack running)
-- `python -m pytest backend/tests/unit -v` — unit tests only
-- `python -m pytest backend/tests/integration -v` — integration tests (requires DB + Redis running)
+- `python -m pytest backend/tests/unit -v` — unit tests only (no database required)
+- `python -m pytest backend/tests/integration -v` — integration tests (requires PostgreSQL + Redis on localhost + `epibridge_test` database)
 - `python -m pytest backend/tests/smoke -v` — smoke tests (requires full stack running)
+
+Integration tests use a dedicated `epibridge_test` PostgreSQL database for isolation.
+
+### Authentication configuration
+
+Key settings for deployment:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `SECRET_KEY` | (required) | Must be at least 32 characters. Generate with `openssl rand -base64 32`. |
+| `session_ttl_seconds` | 86400 (24h) | Per-session time-to-live. |
+| `max_session_ttl_seconds` | 604800 (7d) | Absolute maximum session lifetime (hard upper bound). |
+| `secure_cookie` | False | Set `true` when deploying behind TLS. |
+| `rate_limit_max_attempts` | 10 | Login attempts per window before rate limiting. |
+| `rate_limit_window_seconds` | 300 (5min) | Rate limit window. |
+The bootstrap process (`bootstrap.sh`) creates this database automatically.
+For local native runs, create it manually:
+```
+createdb epibridge_test
+```
 
 **CI** (from repo root, requires Docker):
 - `make ci` — bootstrap full stack (build, start, seed), same as `make bootstrap`
@@ -342,6 +457,39 @@ The test (in `frontend/e2e/canonical-workflow.spec.ts`) validates:
 14. Verifying audit events are visible in the admin Audit Log for each governance action
 
 This is a system test — not UI, not API — covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, download endpoint, and audit ledger.
+
+### Deployment user
+
+Platform services (backend, worker) run as the non-root `epibridge` user. The reference
+deployment provisions matching ownership: `cloud-init.yaml` creates `/var/lib/epibridge/`
+owned by UID 1000, and `scripts/bootstrap.sh` applies the same ownership at setup time.
+The container's `epibridge` user uses a matching UID (1000) so that volume-mounted storage
+directories are writable without runtime permission workarounds or world-writable fallbacks.
+
+### Worker resilience
+
+The worker (`worker/worker/main.py`) runs as a single-threaded infinite polling loop. Three resilience mechanisms are built in:
+
+- **Database connection backoff**: On connection failure, the worker retries with exponential backoff (1s, 2s, 4s, ..., max 60s). Backoff resets to 1s on successful connection.
+- **Outer catch-all**: Any unexpected exception during polling is logged with a full traceback; the loop continues.
+- **Graceful shutdown**: `SIGTERM` and `SIGINT` are handled. The current iteration completes (including any in-flight build or execution), then the loop exits. In-flight containers are left for Docker to manage.
+
+The worker polls `BuildRequest` (PENDING) first, then `ExecutionRequest` (PENDING), within each poll cycle.
+
+### Future refactoring — Authentication flow
+
+The frontend `request()` helper currently combines transport responsibilities
+(HTTP requests, timeout handling, response parsing) with application navigation
+(session-expiry redirect).
+
+A future refactoring should move session-expiry handling into the authentication
+layer (e.g. `AuthProvider` or a central authentication/session manager), leaving
+`request()` responsible only for transport concerns.
+
+At that point the API helper would report authentication failures, while the
+authentication layer would decide whether to redirect, re-authenticate or present
+an appropriate user experience. This would eliminate the need for route-specific
+guards such as the current `/login` pathname check.
 
 ### Stack dependencies
 

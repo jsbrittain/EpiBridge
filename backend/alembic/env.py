@@ -1,5 +1,4 @@
 import sys
-from logging.config import fileConfig
 from pathlib import Path
 
 from sqlalchemy import engine_from_config, pool
@@ -9,13 +8,12 @@ from alembic import context
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+# Import all model classes so they are registered with Base.metadata.
+import app.models  # noqa: F401
 from app.core.config import settings
 from app.db.base import Base
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata

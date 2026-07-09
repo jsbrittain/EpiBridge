@@ -81,6 +81,68 @@ class TestAdminResources:
         assert names == sorted(names)
 
 
+class TestAdminAuthorisation:
+    def test_resources_unauthorized(self, researcher_client):
+        response = researcher_client.get("/api/admin/resources")
+        assert response.status_code == 403
+
+    def test_resource_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(f"/api/admin/resources/{uuid.uuid4()}")
+        assert response.status_code == 403
+
+    def test_execution_environments_unauthorized(self, researcher_client):
+        response = researcher_client.get("/api/admin/execution-environments")
+        assert response.status_code == 403
+
+    def test_execution_environment_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(
+            f"/api/admin/execution-environments/{uuid.uuid4()}"
+        )
+        assert response.status_code == 403
+
+    def test_bundles_unauthorized(self, researcher_client):
+        response = researcher_client.get("/api/admin/bundles")
+        assert response.status_code == 403
+
+    def test_bundle_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(f"/api/admin/bundles/{uuid.uuid4()}")
+        assert response.status_code == 403
+
+    def test_execution_requests_unauthorized(self, researcher_client):
+        response = researcher_client.get("/api/admin/execution-requests")
+        assert response.status_code == 403
+
+    def test_execution_request_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(
+            f"/api/admin/execution-requests/{uuid.uuid4()}"
+        )
+        assert response.status_code == 403
+
+    def test_output_sets_unauthorized(self, researcher_client):
+        response = researcher_client.get("/api/admin/output-sets")
+        assert response.status_code == 403
+
+    def test_output_set_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(f"/api/admin/output-sets/{uuid.uuid4()}")
+        assert response.status_code == 403
+
+    def test_output_by_id_unauthorized(self, researcher_client):
+        import uuid
+
+        response = researcher_client.get(f"/api/admin/outputs/{uuid.uuid4()}")
+        assert response.status_code == 403
+
+
 class TestAdminUsers:
     def test_list_users(self, client, admin_user, researcher_user, moderator_user):
         response = client.get("/api/admin/users")
@@ -105,7 +167,7 @@ class TestAdminUsers:
             json={
                 "email": "new@test.local",
                 "display_name": "New User",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "researcher",
             },
         )
@@ -124,11 +186,23 @@ class TestAdminUsers:
             json={
                 "email": "default@test.local",
                 "display_name": "Default Role",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 201
         assert response.json()["role"] == "researcher"
+
+    def test_create_user_short_password_rejected(self, client):
+        response = client.post(
+            "/api/admin/users",
+            json={
+                "email": "shortpw@test.local",
+                "display_name": "Short Password",
+                "password": "short",
+                "role": "researcher",
+            },
+        )
+        assert response.status_code == 422
 
     def test_create_user_duplicate_email(self, client, admin_user):
         response = client.post(
@@ -136,7 +210,7 @@ class TestAdminUsers:
             json={
                 "email": admin_user.email,
                 "display_name": "Duplicate",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 409
@@ -147,7 +221,7 @@ class TestAdminUsers:
             json={
                 "email": "should@fail.local",
                 "display_name": "Should Fail",
-                "password": "secret",
+                "password": "test-secret",
             },
         )
         assert response.status_code == 403
@@ -172,7 +246,7 @@ class TestAdminUsers:
             json={
                 "email": "mod@test.local",
                 "display_name": "Moderator",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "moderator",
             },
         )
@@ -189,7 +263,7 @@ class TestAdminUsers:
             json={
                 "email": "maint@test.local",
                 "display_name": "Maintainer",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "maintainer",
             },
         )
@@ -205,7 +279,7 @@ class TestAdminUsers:
             json={
                 "email": "admin2@test.local",
                 "display_name": "Admin Two",
-                "password": "secret",
+                "password": "test-secret",
                 "role": "admin",
             },
         )

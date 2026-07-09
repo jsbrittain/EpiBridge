@@ -5,6 +5,7 @@ from sqlalchemy import text
 from app.auth.local import hash_password
 from app.core.config import settings
 from app.db.base import Base
+from app.db.migration import ensure_migrated
 from app.db.session import SessionLocal, engine
 from app.main import app
 from app.models.capability import ALL_CAPABILITIES, UserCapability
@@ -18,9 +19,12 @@ from app.services.session_service import create_session
 
 @pytest.fixture(scope="session", autouse=True)
 def _setup_database():
-    Base.metadata.create_all(bind=engine)
+    ensure_migrated()
     yield
     Base.metadata.drop_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        conn.execute(text("DROP TYPE IF EXISTS user_role"))
 
 
 @pytest.fixture(autouse=True)
@@ -58,6 +62,7 @@ def redis_client():
         host=settings.redis_host,
         port=settings.redis_port,
         password=settings.redis_password,
+        db=settings.redis_db,
         decode_responses=True,
     )
     yield r

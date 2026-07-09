@@ -1,6 +1,7 @@
 import logging
 import os
 import shlex
+import signal
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.builders.registry import registry as builder_registry
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.execution.docker import DockerExecutor
 from app.models.analysis_bundle import AnalysisBundle, AnalysisBundleBuildStatus
@@ -25,8 +27,12 @@ from app.providers.registry import registry
 from app.providers.types import ProviderType
 from app.services.audit_service import create_audit_event
 from app.services.bundle_store import get_bundle_store
+from app.services.output_set_service import (
+    ensure_output_set,
+    register_output as register_set_output,
+)
 
-logging.basicConfig(level=logging.INFO)
+configure_logging(settings.log_level)
 logger = logging.getLogger("worker")
 
 OUTPUT_ROOT = Path(settings.output_dir)
@@ -37,6 +43,15 @@ ANALYSIS_ROOT = (
 )
 DATA_ROOT = Path(settings.data_root)
 POLL_INTERVAL = 5
+BACKOFF_MAX = 60
+
+_shutdown_requested = False
+
+
+def _handle_signal(signum, frame):
+    global _shutdown_requested
+    logger.info("Received signal %d, shutting down after current iteration", signum)
+    _shutdown_requested = True
 
 
 def _timestamp() -> str:
@@ -101,15 +116,21 @@ def resolve_data_mounts(
         try:
             provider_type = ProviderType(dr.provider_type)
         except ValueError:
-            logger.warning(f"Unknown provider type: {dr.provider_type}")
+            logger.warning("Unknown provider type: %s", dr.provider_type)
             continue
         provider = registry.get(provider_type)
         runtime = provider.prepare_runtime(dr.endpoint)
         for mount in runtime.mounts:
-            host_source = str(DATA_ROOT / mount.source)
+            mount_path = Path(mount.source).resolve()
+            data_root_resolved = DATA_ROOT.resolve()
+            if not str(mount_path).startswith(str(data_root_resolved)):
+                raise ValueError(
+                    f"Mount source {mount.source} escapes data root {DATA_ROOT}"
+                )
+            host_source = str(mount_path)
             target = f"/data/{dr.alias}"
-            if not os.path.isdir(host_source):
-                target = os.path.join(target, os.path.basename(host_source))
+            if not mount_path.is_dir():
+                target = os.path.join(target, mount_path.name)
             mounts.append((host_source, target, mount.read_only))
     return mounts
 
@@ -197,11 +218,23 @@ def process_build(db: Session, build: BuildRequest) -> None:
     bundle.build_status = AnalysisBundleBuildStatus.ENVIRONMENT_BUILDING
     build_transition_to(db, build, BuildRequestStatus.BUILDING)
 
-    result = builder.build(
-        bundle_path=bundle_path,
-        base_image=env.image_reference,
-        image_tag=tag,
-    )
+    try:
+        result = builder.build(
+            bundle_path=bundle_path,
+            base_image=env.image_reference,
+            image_tag=tag,
+        )
+    except Exception as e:
+        build_end = _timestamp()
+        build.log = (
+            f"{preamble}\n"
+            f"[{build_end}] BUILD FAILED (exception): {e}"
+        )
+        bundle.build_status = AnalysisBundleBuildStatus.ENVIRONMENT_BUILD_FAILED
+        bundle.build_error = str(e)
+        db.commit()
+        build_transition_to(db, build, BuildRequestStatus.FAILED, str(e))
+        return
 
     build_end = _timestamp()
     if not result.success:
@@ -395,7 +428,7 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         log_body += f"[exec] stderr:\n{result.stderr.rstrip()}\n"
 
     if result.exit_code != 0:
-        logger.error(f"Execution failed (exit {result.exit_code}): {result.stderr}")
+        logger.error("Execution failed (exit %s): %s", result.exit_code, result.stderr or "")
         request.log = (
             f"{preamble}\n"
             f"[{exec_end}] EXECUTION FAILED (exit code {result.exit_code})\n"
@@ -411,8 +444,6 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         )
         return
 
-    from app.services.output_set_service import ensure_output_set, register_output as register_set_output
-
     output_set = ensure_output_set(db, request.id)
     output_count = 0
     if output_dir.is_dir():
@@ -423,7 +454,7 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
                 register_set_output(db, output_set.id, relative, os.path.getsize(fpath))
                 output_count += 1
                 logger.info(
-                    f"Registered output: {relative} ({os.path.getsize(fpath)} bytes)"
+                    "Registered output: %s (%s bytes)", relative, os.path.getsize(fpath)
                 )
 
     request.log = (
@@ -450,24 +481,49 @@ def main():
     logger.info("Worker starting")
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-    while True:
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    backoff = 1
+
+    while not _shutdown_requested:
         try:
             db = SessionLocal()
-            try:
-                pending_builds = get_pending_builds(db)
-                for build in pending_builds:
-                    logger.info(f"Processing build {build.id}")
-                    process_build(db, build)
-
-                pending = get_pending_requests(db)
-                for request in pending:
-                    logger.info(f"Processing request {request.id}: {request.name}")
-                    execute_request(db, request)
-            finally:
-                db.close()
+            backoff = 1
         except Exception as e:
-            logger.error(f"Worker error: {e}")
-        time.sleep(POLL_INTERVAL)
+            logger.warning(
+                "Database connection failed (retry in %ds): %s", backoff, e
+            )
+            time.sleep(backoff)
+            backoff = min(backoff * 2, BACKOFF_MAX)
+            continue
+
+        try:
+            pending_builds = get_pending_builds(db)
+            for build in pending_builds:
+                if _shutdown_requested:
+                    break
+                logger.info("Processing build %s", build.id)
+                process_build(db, build)
+
+            if _shutdown_requested:
+                continue
+
+            pending = get_pending_requests(db)
+            for request in pending:
+                if _shutdown_requested:
+                    break
+                logger.info("Processing request %s: %s", request.id, request.name)
+                execute_request(db, request)
+        except Exception:
+            logger.exception("Worker error")
+        finally:
+            db.close()
+
+        if not _shutdown_requested:
+            time.sleep(POLL_INTERVAL)
+
+    logger.info("Worker shutdown complete")
 
 
 if __name__ == "__main__":

@@ -34,6 +34,5 @@ class Session(Base):
 
     @staticmethod
     def default_expiry() -> datetime:
-        return datetime.now(timezone.utc) + timedelta(
-            seconds=settings.session_ttl_seconds
-        )
+        ttl = min(settings.session_ttl_seconds, settings.max_session_ttl_seconds)
+        return datetime.now(timezone.utc) + timedelta(seconds=ttl)

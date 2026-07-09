@@ -2,16 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/AuthContext";
 import styles from "./Sidebar.module.css";
+
+const adminCapabilities = [
+  "bundle.review",
+  "output.review",
+  "output.release",
+  "user.manage",
+  "data.manage",
+  "environment.manage",
+];
+
+function hasAdminAccess(capabilities: string[]): boolean {
+  return capabilities.some((c) => adminCapabilities.includes(c));
+}
 
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/projects", label: "Projects" },
-  { href: "/admin", label: "Admin" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  const showAdmin =
+    user !== null && hasAdminAccess(user.capabilities);
 
   return (
     <aside className={styles.sidebar}>
@@ -25,6 +42,14 @@ export default function Sidebar() {
             {link.label}
           </Link>
         ))}
+        {showAdmin && (
+          <Link
+            href="/admin"
+            className={`${styles.link} ${pathname.startsWith("/admin") ? styles.active : ""}`}
+          >
+            Admin
+          </Link>
+        )}
       </nav>
     </aside>
   );

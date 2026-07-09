@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
 import {
   AnalysisBundle,
   getProjectBundle,
@@ -21,6 +22,7 @@ const TERMINAL_STATUSES = ["completed", "failed", "unavailable"];
 export default function AnalysisDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const projectId = params.id as string;
   const bundleId = params.bundle_id as string;
 
@@ -228,7 +230,7 @@ export default function AnalysisDetailPage() {
         </div>
         <div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
-            {bundle.status === "draft" && (
+            {bundle.status === "draft" && user?.capabilities.includes("bundle.submit") && (
               <button
                 className="btn btn-primary"
                 onClick={handleSubmit}
@@ -237,7 +239,7 @@ export default function AnalysisDetailPage() {
                 {actionLoading === "Submit" ? "Submitting…" : "Submit"}
               </button>
             )}
-            {bundle.status === "submitted" && (
+            {bundle.status === "submitted" && user?.capabilities.includes("bundle.review") && (
               <>
                 <button
                   className="btn btn-primary"
@@ -255,23 +257,23 @@ export default function AnalysisDetailPage() {
                 </button>
               </>
             )}
-            {bundle.status === "approved_for_execution" && (
-              <>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleRun}
-                  disabled={actionLoading !== null}
-                >
-                  {actionLoading === "Run" ? "Submitting…" : "Run Analysis"}
-                </button>
-                <button
-                  className="btn"
-                  onClick={handleSupersede}
-                  disabled={actionLoading !== null}
-                >
-                  {actionLoading === "Supersede" ? "Superseding…" : "Supersede"}
-                </button>
-              </>
+            {bundle.status === "approved_for_execution" && user?.capabilities.includes("execution.run") && (
+              <button
+                className="btn btn-primary"
+                onClick={handleRun}
+                disabled={actionLoading !== null}
+              >
+                {actionLoading === "Run" ? "Submitting…" : "Run Analysis"}
+              </button>
+            )}
+            {bundle.status === "approved_for_execution" && user?.capabilities.includes("bundle.review") && (
+              <button
+                className="btn"
+                onClick={handleSupersede}
+                disabled={actionLoading !== null}
+              >
+                {actionLoading === "Supersede" ? "Superseding…" : "Supersede"}
+              </button>
             )}
             <Link
               href={`/projects/${projectId}/analysis/${bundleId}/edit`}

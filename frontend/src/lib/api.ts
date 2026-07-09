@@ -1,4 +1,5 @@
 const API_BASE = "";
+export const API_TIMEOUT_MS = 30000;
 
 export interface User {
   id: string;
@@ -181,15 +182,36 @@ export interface ExecutionEnvironment {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    ...options,
-  });
-  if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      signal: controller.signal,
+      ...options,
+    });
+    if (res.status === 401
+        && !path.includes("/api/auth/login")
+        && typeof window !== "undefined"
+        && window.location.pathname !== "/login"
+    ) {
+      window.location.href = "/login";
+      throw new Error("Session expired");
+    }
+    if (!res.ok) {
+      const detail = await res.json().then((b) => b.detail).catch(() => res.statusText);
+      throw new Error(detail);
+    }
+    return res.json();
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return res.json();
 }
 
 export function login(email: string, password: string): Promise<User> {

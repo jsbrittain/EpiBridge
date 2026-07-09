@@ -22,5 +22,5 @@ class UserRead(BaseModel):
 class UserCreate(BaseModel):
     email: ValidEmail
     display_name: str
-    password: str
+    password: str = Field(min_length=8)
     role: UserRole = UserRole.RESEARCHER

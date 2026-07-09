@@ -1,25 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getCurrentUser, logout } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import styles from "./Header.module.css";
 
 export default function Header() {
-  const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    getCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null));
-  }, []);
-
-  async function handleLogout() {
-    await logout();
-    setUser(null);
-    router.push("/login");
-  }
+  const { user, logout } = useAuth();
 
   return (
     <header className={styles.header}>
@@ -28,7 +13,7 @@ export default function Header() {
         {user ? (
           <>
             <button
-              onClick={handleLogout}
+              onClick={logout}
               style={{
                 background: "none",
                 border: "none",
@@ -40,7 +25,7 @@ export default function Header() {
             >
               Sign out
             </button>
-            <span>{user.display_name}</span>
+            <span data-testid="header-user-name">{user.display_name}</span>
             <div className={styles.avatar}>
               {user.display_name.charAt(0).toUpperCase()}
             </div>
