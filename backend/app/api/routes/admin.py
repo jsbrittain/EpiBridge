@@ -17,7 +17,7 @@ from app.models.user import User
 from app.schemas.analysis_bundle import AnalysisBundleRead
 from app.schemas.audit_event import AuditEventList
 from app.schemas.data_resource import DataResourceRead
-from app.schemas.execution_environment import ExecutionEnvironmentRead
+from app.schemas.execution_environment import ExecutionEnvironmentAdminRead
 from app.schemas.execution_request import ExecutionRequestRead
 from app.schemas.output import OutputRead
 from app.schemas.output_set import OutputSetListItem, OutputSetRead
@@ -87,7 +87,7 @@ def get_resource(
 
 @router.get(
     "/admin/execution-environments",
-    response_model=List[ExecutionEnvironmentRead],
+    response_model=List[ExecutionEnvironmentAdminRead],
 )
 def list_execution_environments(
     db: Session = Depends(get_db),
@@ -99,7 +99,7 @@ def list_execution_environments(
 
 @router.get(
     "/admin/execution-environments/{environment_id}",
-    response_model=ExecutionEnvironmentRead,
+    response_model=ExecutionEnvironmentAdminRead,
 )
 def get_execution_environment(
     environment_id: str,
@@ -161,6 +161,7 @@ def list_bundles(
             resource_identifiers=get_resource_identifiers(b),
             outputs=b.outputs,
             parameters=b.parameters,
+            build_strategy=b.build_strategy,
             build_status=b.build_status,
             build_error=b.build_error,
             build_log="",
@@ -201,6 +202,7 @@ def get_bundle(
         resource_identifiers=get_resource_identifiers(bundle),
         outputs=bundle.outputs,
         parameters=bundle.parameters,
+        build_strategy=bundle.build_strategy,
         build_status=bundle.build_status,
         build_error=bundle.build_error,
         build_log="",
@@ -664,6 +666,7 @@ def _admin_bundle_to_read(bundle: AnalysisBundle) -> AnalysisBundleRead:
         resource_identifiers=get_resource_identifiers(bundle),
         outputs=bundle.outputs,
         parameters=bundle.parameters,
+        build_strategy=bundle.build_strategy,
         build_status=bundle.build_status,
         build_error=bundle.build_error,
         build_log="",

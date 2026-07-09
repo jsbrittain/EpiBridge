@@ -90,7 +90,7 @@ echo "Building application images..."
 docker compose build
 
 echo "Building analysis container images..."
-for dir in containers/*/; do
+for dir in execution-environments/*/; do
     tag="epibridge/$(basename "$dir"):latest"
     echo "  Building $tag..."
     docker build -t "$tag" "$dir"
@@ -153,7 +153,13 @@ echo "Seeding administrator account..."
 docker compose exec -T backend python -m app.cli seed-admin
 
 ###############################################################################
-# 10. Health check
+# 10. Seed maintainer account
+###############################################################################
+echo "Seeding maintainer account..."
+docker compose exec -T backend python -m app.cli seed-maintainer
+
+###############################################################################
+# 11. Health check
 ###############################################################################
 echo "Running health checks..."
 ./scripts/healthcheck.sh

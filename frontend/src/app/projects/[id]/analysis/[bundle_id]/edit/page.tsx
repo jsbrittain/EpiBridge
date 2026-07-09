@@ -164,6 +164,16 @@ export default function EditAnalysisPage() {
               </option>
             ))}
           </select>
+          {selectedEnvId && (
+            <Link
+              href={`/environments/${environments.find((e) => e.id === selectedEnvId)?.identifier ?? ""}`}
+              style={{ fontSize: "0.85rem", color: "var(--color-primary)", textDecoration: "none", marginTop: "var(--spacing-xs)", display: "inline-block" }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View environment details →
+            </Link>
+          )}
         </div>
 
         <div style={{ marginBottom: "var(--spacing-md)" }}>

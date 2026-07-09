@@ -35,3 +35,7 @@ class ExecutionEnvironmentRead(BaseModel):
         return _display_name(self.runtime)
 
     model_config = {"from_attributes": True}
+
+
+class ExecutionEnvironmentAdminRead(ExecutionEnvironmentRead):
+    definition_path: str | None = None

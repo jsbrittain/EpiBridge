@@ -58,6 +58,7 @@ export interface AnalysisBundle {
   execution_environment_id: string;
   name: string;
   status: string;
+  build_strategy: string;
   build_status: string;
   build_error: string;
   build_log: string;
@@ -89,6 +90,7 @@ export interface AnalysisBundleCreate {
   resource_identifiers?: string[];
   outputs?: string[];
   parameters?: Record<string, unknown>;
+  build_strategy?: string;
   status?: string;
 }
 
@@ -103,6 +105,7 @@ export interface AnalysisBundleUpdate {
   resource_identifiers?: string[];
   outputs?: string[];
   parameters?: Record<string, unknown>;
+  build_strategy?: string;
 }
 
 export interface ExecutionRequest {
@@ -456,8 +459,24 @@ export function getOutputSetDownloadUrl(
   return `/api/projects/${projectId}/execution-requests/${requestId}/outputs/download`;
 }
 
+export interface ArtefactList {
+  artefacts: string[];
+}
+
 export async function getExecutionEnvironments(): Promise<ExecutionEnvironment[]> {
   return request<ExecutionEnvironment[]>("/api/execution-environments");
+}
+
+export async function getExecutionEnvironment(identifier: string): Promise<ExecutionEnvironment> {
+  return request<ExecutionEnvironment>(`/api/execution-environments/${identifier}`);
+}
+
+export async function getEnvironmentArtefacts(identifier: string): Promise<ArtefactList> {
+  return request<ArtefactList>(`/api/execution-environments/${identifier}/artefacts`);
+}
+
+export function getEnvironmentArtefactUrl(identifier: string, path: string): string {
+  return `/api/execution-environments/${identifier}/artefacts/${path}`;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

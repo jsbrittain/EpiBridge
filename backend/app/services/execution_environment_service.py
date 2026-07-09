@@ -1,7 +1,9 @@
 import uuid
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.execution_environment import ExecutionEnvironment
 
 REQUIRED_FIELDS = {"identifier", "name", "runtime"}
@@ -60,6 +62,7 @@ def upsert_environment(db: Session, entry: dict) -> ExecutionEnvironment:
         existing.description = entry.get("description", "")
         existing.status = entry.get("status", "active")
         existing.image_reference = entry.get("image_reference", "")
+        existing.definition_path = entry.get("definition_path")
         return existing
 
     env = ExecutionEnvironment(
@@ -69,6 +72,7 @@ def upsert_environment(db: Session, entry: dict) -> ExecutionEnvironment:
         description=entry.get("description", ""),
         status=entry.get("status", "active"),
         image_reference=entry.get("image_reference", ""),
+        definition_path=entry.get("definition_path"),
     )
     db.add(env)
     return env
@@ -85,3 +89,16 @@ def register_from_manifest(
     for env in results:
         db.refresh(env)
     return results
+
+
+def get_artefact_root(environment: ExecutionEnvironment) -> Path | None:
+    if not environment.definition_path:
+        return None
+    return Path(settings.environment_manifest_dir) / environment.definition_path
+
+
+def list_artefact_files(environment: ExecutionEnvironment) -> list[str]:
+    root = get_artefact_root(environment)
+    if root is None or not root.is_dir():
+        return []
+    return sorted(f.name for f in root.iterdir() if f.is_file())
