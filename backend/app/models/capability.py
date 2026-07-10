@@ -26,6 +26,7 @@ class Capability(str, enum.Enum):
     DATA_MANAGE = "data.manage"
     USER_MANAGE = "user.manage"
     BUILD_CUSTOMIZE = "build.customize"
+    TERMS_MANAGE = "terms.manage"
 
     @classmethod
     def all_values(cls) -> set[str]:

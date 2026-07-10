@@ -26,6 +26,8 @@ from app.models.project_membership import ProjectMembership
 from app.models.role import RoleRecord
 from app.models.role_capability import RoleCapability
 from app.models.session import Session
+from app.models.terms_acceptance import TermsAcceptance
+from app.models.terms_of_service import TermsOfService
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -58,6 +60,8 @@ __all__ = [
     "RoleCapability",
     "RoleRecord",
     "Session",
+    "TermsAcceptance",
+    "TermsOfService",
     "User",
     "UserCapability",
     "UserRole",
