@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Project status — Milestone 18 Phase 6 complete (Operational Hardening)
+## Project status — Milestone 20 complete (Consent & Terms Governance)
 
 ### Exists and functional
 
@@ -8,22 +8,29 @@
 backend/         FastAPI: identity model (User, Role, Capability,
                  ProjectMembership), capability-based policy, SQLAlchemy,
                  Alembic, config, Local Identity Provider auth,
-                 CLI seed-admin/seed-demo, bundle store, worker execution,
+                 CLI seed-admin/seed-demo/seed-terms, bundle store, worker execution,
                  Environment Builder subsystem, auth framework seeder,
                  user management API (create/list/get users), email validation,
+                 terms of service model (TermsOfService, TermsAcceptance),
+                 terms service (publish, accept, query), terms API routes,
+                 platform terms enforcement (dependency-based),
+                 dataset terms enforcement (resource attach, bundle submit),
                  audit event model (AuditEvent, AuditEventType), audit service,
                  audit query API
 frontend/        Next.js + React + TypeScript: login, projects, admin pages,
                  user management UI, project members UI, audit log tab,
-                 per-project and per-resource audit views
+                 per-project and per-resource audit views,
+                 platform terms interstitial (/terms), terms admin page,
+                 dataset terms dialog during resource attach and bundle submit
 execution-environments/      Execution Environment artefacts (base images, manifests)
 vm/              cloud-init.yaml, Caddyfile (HTTPS, HSTS, compression,
                  security headers, request size limits), runtime spec
 scripts/         bootstrap.sh, install.sh, upgrade.sh, backup.sh, restore.sh, healthcheck.sh
 docker-compose.yml  6 services + optional ollama (--profile ai),
-                    internal + frontend + external networks
-tests/           Unit (256), integration (identity validation, user management,
-                 project membership, audit), smoke, e2e (canonical workflow)
+                     internal + frontend + external networks
+tests/           Unit (360), integration (identity validation, user management,
+                 project membership, audit, terms governance), smoke,
+                 e2e (canonical workflow with terms)
 docs/            Architecture (current state), security, API, vision, AI assistance
 ```
 
@@ -103,6 +110,7 @@ Capability vocabulary (defined in `app.models.capability.Capability` enum):
 | `environment.manage` | Manage execution environments |
 | `data.manage` | Manage data resources |
 | `user.manage` | Manage user accounts |
+| `terms.manage` | Publish and manage terms of service |
 
 The `capabilities` table is materialised from the enum during seeding (the enum is authoritative). `UserCapability` records are copied from role templates at user creation and become independent thereafter.
 
@@ -213,6 +221,15 @@ User creation is an institutional act with security implications. User administr
 
 - `user.created`
 
+#### Terms
+
+Terms events record the publication of institutional governance documents and their acknowledgement by researchers. Publication events are not project-scoped.
+
+- `platform_terms.published`
+- `dataset_terms.published`
+- `platform_terms.accepted`
+- `dataset_terms.accepted`
+
 ### Policy layer
 
 The policy layer (`app.auth.policy`) exposes three functions:
@@ -240,6 +257,9 @@ Every `/api/admin/*` endpoint enforces a capability check. The requirements are:
 | `GET /admin/outputs/{id}` | `output.review` |
 | `GET /admin/users`, `GET /admin/users/{id}`, `POST /admin/users` | `user.manage` |
 | `GET /admin/audit-events` | Tiered: `bundle.review` / `output.review` / `user.manage` |
+| `POST /admin/terms/platform` | `terms.manage` |
+| `POST /admin/resources/{id}/terms/publish` | `terms.manage` |
+| `GET /admin/terms/status` | `terms.manage` |
 | `POST /admin/bundles/{id}/approve`, `/reject` | `bundle.review` |
 | `POST /admin/bundles/{id}/supersede` | `bundle.review` (unless owner) |
 | `POST /admin/output-sets/{id}/approve`, `/reject` | `output.review` |
@@ -306,6 +326,64 @@ Three global exception handlers provide a safety net for unhandled exceptions:
 
 These are fallback handlers. Route-specific error handling (404s, 401s, 422s from service-layer `ValueError` catch blocks) takes precedence. The global `ValueError` handler returns a generic message to avoid leaking internal implementation details. The global `Exception` handler ensures no unhandled exception leaks internal details to the client.
 
+### Terms Governance
+
+Versioned institutional Terms of Service with backend-authoritative enforcement.
+
+#### Platform Terms
+
+- Versioned Terms of Service governing platform access.
+- Published by administrators via `POST /api/admin/terms/platform` (requires `terms.manage`).
+- Presented immediately after authentication when the current version has not been accepted.
+- Acceptance is mandatory before platform access is granted.
+- Refusal or dismissal logs the user out.
+- Acceptance is permanently recorded in `terms_acceptance` and audited as `platform_terms.accepted`.
+- The publishing administrator is automatically recorded as having accepted (act of publication implies institutional understanding).
+
+#### Dataset Terms
+
+Each Data Resource may define its own versioned Terms of Service.
+
+- Published by administrators via `POST /api/admin/resources/{id}/terms/publish` (requires `terms.manage`).
+- Researchers must accept the latest version before: attaching the resource to a Project, or submitting an Analysis Bundle referencing that resource.
+- Enforcement occurs at the API layer — resource attachment and bundle submission endpoints check acceptance before proceeding.
+- If Dataset Terms are updated (new version published), researchers must accept the latest version before further use.
+
+#### Models
+
+`TermsOfService` (`terms_of_service` table): Immutable institutional artefact. Each row is a specific published version for a specific scope.
+
+`TermsAcceptance` (`terms_acceptance` table): Immutable append-only record of a user accepting a specific terms version. Acceptance state is always derived from these records — never from mutable boolean flags.
+
+#### Enforcement
+
+- Platform terms: `require_platform_terms_accepted()` FastAPI dependency, applied at the router level on `projects`, `admin`, `environments` routers. No-op when no terms are published (upgrade-safe).
+- Dataset terms: checked inline in `post_project_resources()` and `post_submit_bundle()` route handlers.
+
+#### Audit Events
+
+| Event | Trigger |
+|---|---|
+| `platform_terms.published` | Platform terms published |
+| `dataset_terms.published` | Data resource terms published |
+| `platform_terms.accepted` | User accepts platform terms |
+| `dataset_terms.accepted` | User accepts dataset terms |
+
+#### User-Facing API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/terms/platform/current` | Current platform terms |
+| `POST` | `/api/terms/platform/accept` | Accept platform terms |
+| `GET` | `/api/terms/resources/{id}/current` | Current resource terms |
+| `POST` | `/api/terms/resources/{id}/accept` | Accept resource terms |
+| `GET` | `/api/terms/status` | All terms acceptance status |
+| `GET` | `/api/terms/check?resource_ids=...` | Check specific resources |
+
+#### Seeding
+
+`epibridge seed-terms` publishes default platform terms (Markdown) for development environments. Idempotent — skips if terms already exist.
+
 ### Health Check
 
 `GET /api/health` returns platform operational status:
@@ -337,6 +415,19 @@ An HTTP middleware logs each request after completion:
 - **Demo workspace** (optional) can be created by `seed-demo` CLI command — a development tool, not application startup logic.
 - **Manifest directories** (`RESOURCE_MANIFEST_DIR`, `ENVIRONMENT_MANIFEST_DIR`) are deployment configuration, not application defaults. Docker Compose sets them for development; production points them elsewhere.
 
+### Seeded development accounts
+
+The following personas are seeded during `bootstrap.sh` and are available for
+manual validation:
+
+| Persona | Email | Password | Role |
+|---------|-------|----------|------|
+| Administrator | `admin@epibridge.local` | From `ADMIN_PASSWORD` in `.env` (generated) | admin |
+| Maintainer | `maintainer@epibridge.local` | `maintainer` | maintainer |
+| Researcher | `researcher@epibridge.local` | `researcher` | researcher |
+
+All three are created idempotently — re-running bootstrap does not duplicate them.
+
 ### Developer commands
 
 The standard development workflow:
@@ -353,6 +444,9 @@ make test         # run tests
 - `pip install -e ".[dev]"` — install dependencies (including dev tools)
 - `uvicorn app.main:app --reload` — dev server (applies pending Alembic migrations on startup)
 - `python -m app.cli seed-admin` — seed admin user
+- `python -m app.cli seed-maintainer` — seed maintainer user
+- `python -m app.cli seed-researcher` — seed researcher user
+- `python -m app.cli seed-terms` — seed default platform terms (dev debugging tool)
 - `python -m app.cli seed-demo` — seed demo workspace (dev debugging tool)
 - `alembic upgrade head` — apply pending migrations
 - `alembic revision --autogenerate -m "description"` — generate a new migration from model changes
@@ -443,18 +537,19 @@ make playwright    # run the canonical workflow e2e test
 The test (in `frontend/e2e/canonical-workflow.spec.ts`) validates:
 1. Opening EpiBridge
 2. Login with admin credentials
-3. Creating a project
-4. Attaching a data resource to the project
-5. Creating an analysis and uploading a bundle
-6. Submitting the bundle (DRAFT → SUBMITTED)
-7. Approving the bundle (SUBMITTED → APPROVED_FOR_EXECUTION)
-8. Running the analysis
-9. Waiting for PENDING → RUNNING → COMPLETED status transition
-10. Approving the Output Set (PENDING_REVIEW → APPROVED)
-11. Releasing the Output Set (APPROVED → RELEASED), creating the Release Package ZIP
-12. Downloading the Release Package
-13. Verifying the ZIP contains the expected output file (`summary.csv`) and execution metadata (`execution_metadata.json`)
-14. Verifying audit events are visible in the admin Audit Log for each governance action
+3. Publishing platform terms via the admin API
+4. Creating a project
+5. Attaching a data resource to the project
+6. Creating an analysis and uploading a bundle
+7. Submitting the bundle (DRAFT → SUBMITTED)
+8. Approving the bundle (SUBMITTED → APPROVED_FOR_EXECUTION)
+9. Running the analysis
+10. Waiting for PENDING → RUNNING → COMPLETED status transition
+11. Approving the Output Set (PENDING_REVIEW → APPROVED)
+12. Releasing the Output Set (APPROVED → RELEASED), creating the Release Package ZIP
+13. Downloading the Release Package
+14. Verifying the ZIP contains the expected output file (`summary.csv`) and execution metadata (`execution_metadata.json`)
+15. Verifying audit events are visible in the admin Audit Log for each governance action
 
 This is a system test — not UI, not API — covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, download endpoint, and audit ledger.
 

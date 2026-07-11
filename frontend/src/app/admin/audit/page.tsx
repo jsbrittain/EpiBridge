@@ -25,6 +25,16 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
+function eventDetail(e: AuditEvent): string {
+  const m = e.event_metadata as Record<string, string | undefined>;
+  return m?.bundle_name
+    || m?.project_name
+    || m?.user_email
+    || m?.member_email
+    || m?.resource_name
+    || `${e.resource_type} (${e.resource_id.slice(0, 8)}…)`;
+}
+
 export default function AdminAuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
@@ -105,7 +115,7 @@ export default function AdminAuditPage() {
               <thead>
                 <tr>
                   <th>Event</th>
-                  <th>Resource</th>
+                  <th>Detail</th>
                   <th>Actor</th>
                   <th>When</th>
                 </tr>
@@ -128,8 +138,11 @@ export default function AdminAuditPage() {
                         {e.event_type}
                       </span>
                     </td>
-                    <td style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
-                      {e.resource_type}
+                    <td style={{ fontSize: "0.85rem" }}>
+                      {eventDetail(e)}
+                      <span style={{ color: "var(--color-text-secondary)", fontSize: "0.75rem", marginLeft: "var(--spacing-xs)" }}>
+                        ({e.resource_type})
+                      </span>
                     </td>
                     <td style={{ fontSize: "0.85rem" }}>
                       {e.actor_display_name}

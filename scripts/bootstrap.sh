@@ -159,9 +159,29 @@ echo "Seeding maintainer account..."
 docker compose exec -T backend python -m app.cli seed-maintainer
 
 ###############################################################################
-# 11. Health check
+# 11. Seed researcher account
+###############################################################################
+echo "Seeding researcher account..."
+docker compose exec -T backend python -m app.cli seed-researcher
+
+###############################################################################
+# 12. Seed platform terms
+###############################################################################
+echo "Seeding platform terms..."
+docker compose exec -T backend python -m app.cli seed-terms
+
+###############################################################################
+# 13. Health check
 ###############################################################################
 echo "Running health checks..."
 ./scripts/healthcheck.sh
 
+echo ""
+echo "=== Seeded development accounts ==="
+echo "  Administrator  admin@epibridge.local   (from ADMIN_PASSWORD in .env)"
+echo "  Maintainer     maintainer@epibridge.local  / maintainer"
+echo "  Researcher     researcher@epibridge.local  / researcher"
+echo ""
+echo "Platform terms: published (acceptance required at first login)"
+echo "Dataset terms for mex-dengue-2026: published"
 echo "=== EpiBridge bootstrap complete ==="

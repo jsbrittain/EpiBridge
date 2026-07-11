@@ -14,9 +14,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (pathname === "/login") {
-      if (!loading && user) {
-        router.push("/");
+    if (pathname === "/login" || pathname === "/terms") {
+      if (!loading && user && pathname !== "/terms") {
+        if (user.needs_platform_terms_acceptance) {
+          router.replace("/terms");
+        } else {
+          router.replace("/");
+        }
       }
       if (!loading) {
         setReady(true);
@@ -26,13 +30,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (!loading) {
       if (!user) {
         router.push("/login");
+      } else if (user.needs_platform_terms_acceptance && pathname !== "/terms") {
+        router.replace("/terms");
       } else {
         setReady(true);
       }
     }
   }, [pathname, router, user, loading]);
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/terms") {
     return ready ? <>{children}</> : null;
   }
 

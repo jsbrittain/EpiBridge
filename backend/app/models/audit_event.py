@@ -38,6 +38,11 @@ class AuditEventType(str, enum.Enum):
 
     USER_CREATED = "user.created"
 
+    PLATFORM_TERMS_PUBLISHED = "platform_terms.published"
+    DATASET_TERMS_PUBLISHED = "dataset_terms.published"
+    PLATFORM_TERMS_ACCEPTED = "platform_terms.accepted"
+    DATASET_TERMS_ACCEPTED = "dataset_terms.accepted"
+
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
