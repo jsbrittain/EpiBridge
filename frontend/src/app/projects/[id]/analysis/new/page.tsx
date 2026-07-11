@@ -97,7 +97,7 @@ export default function CreateAnalysisPage() {
         &larr; Back to Analysis
       </Link>
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginTop: "var(--spacing-md)", marginBottom: "var(--spacing-lg)" }}>
-        Create Analysis
+        New Draft Bundle
       </h2>
 
       <div className="card" style={{ maxWidth: "640px" }}>

@@ -98,7 +98,7 @@ test("Canonical Workflow", async ({ page }) => {
   await expect(page.getByTestId("analysis-heading")).toBeVisible();
 
   // Navigate to Create Analysis
-  await page.getByRole("link", { name: "Create Analysis" }).click();
+  await page.getByRole("link", { name: "New Draft Bundle" }).click();
 
   // Fill the form
   await page.getByLabel("Name").fill(analysisName);

@@ -209,6 +209,280 @@ export default function AnalysisDetailPage() {
   if (error) return <div className="card empty-state">{error}</div>;
   if (!bundle) return <div className="card empty-state">Not found</div>;
 
+  const isDraft = bundle.status === "draft";
+
+  if (!isDraft) {
+    return (
+      <div>
+        {termsResourceId && (
+          <TermsDialog
+            resourceId={termsResourceId}
+            resourceName={termsResourceName}
+            onAccept={handleTermsAccept}
+            onCancel={handleTermsCancel}
+          />
+        )}
+
+        <Link
+          href={`/projects/${projectId}/analysis`}
+          style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", textDecoration: "none" }}
+        >
+          &larr; Back to Analysis
+        </Link>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "var(--spacing-md)", marginBottom: "var(--spacing-lg)" }}>
+          <div>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-xs)" }}>
+              {bundle.name}
+            </h2>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                ...bundleStatusStyle(bundle.status),
+              }}
+            >
+              {formatBundleStatus(bundle.status)}
+            </span>
+            <div style={{ marginTop: "var(--spacing-sm)", fontSize: "0.85rem", fontWeight: 600 }}>
+              {bundle.build_status === "environment_ready" && (
+                <span style={{ color: "#2e7d32" }}>Ready to run</span>
+              )}
+              {(bundle.build_status === "environment_building" || (bundle.build_status === "environment_not_built" && bundle.status === "approved_for_execution")) && (
+                <span style={{ color: "#ed6c02" }}>Preparing execution environment…</span>
+              )}
+              {bundle.build_status === "environment_build_failed" && (
+                <span>
+                  <span style={{ color: "#d32f2f" }}>Execution environment could not be prepared</span>
+                  {bundle.build_log && (
+                    <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
+                      <LogViewer log={bundle.build_log} title="Build Log (failed)" maxHeight="200px" />
+                    </span>
+                  )}
+                </span>
+              )}
+              {bundle.build_status === "environment_ready" && bundle.build_log && (
+                <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
+                  <LogViewer log={bundle.build_log} title="Build Log" maxHeight="200px" />
+                </span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
+              {bundle.status === "submitted" && user?.capabilities.includes("bundle.review") && (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleApprove}
+                    disabled={actionLoading !== null}
+                  >
+                    {actionLoading === "Approve" ? "Approving…" : "Approve"}
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={handleReject}
+                    disabled={actionLoading !== null}
+                  >
+                    {actionLoading === "Reject" ? "Rejecting…" : "Reject"}
+                  </button>
+                </>
+              )}
+              {bundle.status === "approved_for_execution" && user?.capabilities.includes("execution.run") && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRun}
+                  disabled={actionLoading !== null}
+                >
+                  {actionLoading === "Run" ? "Submitting…" : "Run Analysis"}
+                </button>
+              )}
+              {bundle.status === "approved_for_execution" && user?.capabilities.includes("bundle.review") && (
+                <button
+                  className="btn"
+                  onClick={handleSupersede}
+                  disabled={actionLoading !== null}
+                >
+                  {actionLoading === "Supersede" ? "Superseding…" : "Supersede"}
+                </button>
+              )}
+            </div>
+            {error && (
+              <div style={{ color: "#d32f2f", fontSize: "0.85rem", textAlign: "right" }}>
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card" style={{ maxWidth: "640px" }}>
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Runtime
+            </div>
+            <div>{bundle.display_runtime}</div>
+          </div>
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Build Strategy
+            </div>
+            <div>
+              {bundle.build_strategy === "custom" ? (
+                <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: 600, background: "#e3f2fd", color: "#1565c0" }}>
+                  Custom Build
+                </span>
+              ) : (
+                <span>Institutional Build</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Version
+            </div>
+            <div>{bundle.version}</div>
+          </div>
+
+          {bundle.description && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Description
+              </div>
+              <div style={{ lineHeight: 1.6 }}>{bundle.description}</div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Interpreter
+            </div>
+            <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
+          </div>
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Entrypoint
+            </div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint}</div>
+          </div>
+
+          {bundle.arguments && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Arguments
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.arguments}</div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Data Resources
+            </div>
+            {bundle.resource_identifiers.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: "var(--spacing-lg)" }}>
+                {bundle.resource_identifiers.map((id) => (
+                  <li key={id} style={{ marginBottom: "var(--spacing-xs)" }}>{id}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ color: "var(--color-text-secondary)" }}>None</div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "var(--spacing-xl)", paddingTop: "var(--spacing-md)", borderTop: "1px solid var(--color-border)" }}>
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Created
+              </div>
+              <div>{new Date(bundle.created_at).toLocaleDateString()}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Updated
+              </div>
+              <div>{new Date(bundle.updated_at).toLocaleDateString()}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ maxWidth: "640px", marginTop: "var(--spacing-lg)" }}>
+          <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
+            AI Analysis Summary
+          </h3>
+
+          {bundle.ai_review === null && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Not available for this deployment</div>
+            </div>
+          )}
+
+          {bundle.ai_review?.status === "pending" && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Status: Pending</div>
+            </div>
+          )}
+
+          {bundle.ai_review?.status === "completed" && (
+            <>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Status
+                </div>
+                <div>Completed</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Summary
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.summary}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Assessment
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.assessment}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Assessment Confidence
+                </div>
+                <div>{bundle.ai_review.assessment_confidence}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Reviewer Notes
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.reviewer_notes}</div>
+              </div>
+            </>
+          )}
+
+          {(bundle.ai_review?.status === "unavailable" || bundle.ai_review?.status === "failed") && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Status: Unavailable</div>
+            </div>
+          )}
+
+          {bundle.ai_review?.status !== "pending" && (
+            <button
+              className="btn"
+              onClick={handleTriggerReview}
+              disabled={reviewing}
+            >
+              {reviewing ? "Processing..." : reviewActionLabel()}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {termsResourceId && (
@@ -227,11 +501,34 @@ export default function AnalysisDetailPage() {
         &larr; Back to Analysis
       </Link>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "var(--spacing-md)", marginBottom: "var(--spacing-lg)" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginTop: "var(--spacing-md)",
+          marginBottom: "var(--spacing-lg)",
+        }}
+      >
         <div>
-          <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-xs)" }}>
-            {bundle.name}
-          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 600, margin: 0 }}>
+              {bundle.name}
+            </h2>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                background: "#edf4ff",
+                color: "#1565c0",
+              }}
+            >
+              Workspace
+            </span>
+          </div>
           <span
             style={{
               display: "inline-block",
@@ -242,77 +539,18 @@ export default function AnalysisDetailPage() {
               ...bundleStatusStyle(bundle.status),
             }}
           >
-            {formatBundleStatus(bundle.status)}
+            {formatBundleStatus(bundle.status)} &mdash; Editable
           </span>
-          <div style={{ marginTop: "var(--spacing-sm)", fontSize: "0.85rem", fontWeight: 600 }}>
-            {bundle.build_status === "environment_ready" && (
-              <span style={{ color: "#2e7d32" }}>Ready to run</span>
-            )}
-            {(bundle.build_status === "environment_building" || (bundle.build_status === "environment_not_built" && bundle.status === "approved_for_execution")) && (
-              <span style={{ color: "#ed6c02" }}>Preparing execution environment…</span>
-            )}
-            {bundle.build_status === "environment_build_failed" && (
-              <span>
-                <span style={{ color: "#d32f2f" }}>Execution environment could not be prepared</span>
-                {bundle.build_log && (
-                  <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
-                    <LogViewer log={bundle.build_log} title="Build Log (failed)" maxHeight="200px" />
-                  </span>
-                )}
-              </span>
-            )}
-            {bundle.build_status === "environment_ready" && bundle.build_log && (
-              <span style={{ display: "block", marginTop: "var(--spacing-sm)" }}>
-                <LogViewer log={bundle.build_log} title="Build Log" maxHeight="200px" />
-              </span>
-            )}
-          </div>
         </div>
         <div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
-            {bundle.status === "draft" && user?.capabilities.includes("bundle.submit") && (
+            {user?.capabilities.includes("bundle.submit") && (
               <button
                 className="btn btn-primary"
                 onClick={handleSubmit}
                 disabled={actionLoading !== null}
               >
-                {actionLoading === "Submit" ? "Submitting…" : "Submit"}
-              </button>
-            )}
-            {bundle.status === "submitted" && user?.capabilities.includes("bundle.review") && (
-              <>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleApprove}
-                  disabled={actionLoading !== null}
-                >
-                  {actionLoading === "Approve" ? "Approving…" : "Approve"}
-                </button>
-                <button
-                  className="btn"
-                  onClick={handleReject}
-                  disabled={actionLoading !== null}
-                >
-                  {actionLoading === "Reject" ? "Rejecting…" : "Reject"}
-                </button>
-              </>
-            )}
-            {bundle.status === "approved_for_execution" && user?.capabilities.includes("execution.run") && (
-              <button
-                className="btn btn-primary"
-                onClick={handleRun}
-                disabled={actionLoading !== null}
-              >
-                {actionLoading === "Run" ? "Submitting…" : "Run Analysis"}
-              </button>
-            )}
-            {bundle.status === "approved_for_execution" && user?.capabilities.includes("bundle.review") && (
-              <button
-                className="btn"
-                onClick={handleSupersede}
-                disabled={actionLoading !== null}
-              >
-                {actionLoading === "Supersede" ? "Superseding…" : "Supersede"}
+                {actionLoading === "Submit" ? "Submitting…" : "Submit for Review"}
               </button>
             )}
             <Link
@@ -320,7 +558,7 @@ export default function AnalysisDetailPage() {
               className="btn"
               style={{ textDecoration: "none" }}
             >
-              Edit
+              Continue
             </Link>
           </div>
           {error && (
@@ -331,166 +569,229 @@ export default function AnalysisDetailPage() {
         </div>
       </div>
 
-      <div className="card" style={{ maxWidth: "640px" }}>
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Runtime
-          </div>
-          <div>{bundle.display_runtime}</div>
-        </div>
+      <div style={{ maxWidth: "720px" }}>
+        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
+          <h3
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--color-text-secondary)",
+              marginBottom: "var(--spacing-md)",
+              paddingBottom: "var(--spacing-sm)",
+              borderBottom: "1px solid var(--color-border)",
+            }}
+          >
+            Configuration
+          </h3>
 
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Build Strategy
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Execution Environment
+              </div>
+              <div>{bundle.display_runtime}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Build Strategy
+              </div>
+              <div>
+                {bundle.build_strategy === "custom" ? (
+                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: 600, background: "#e3f2fd", color: "#1565c0" }}>
+                    Custom Build
+                  </span>
+                ) : (
+                  <span>Institutional Build</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Entrypoint
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Interpreter
+              </div>
+              <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Version
+              </div>
+              <div>{bundle.version}</div>
+            </div>
+
+            {bundle.arguments && (
+              <div>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Arguments
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.arguments}</div>
+              </div>
+            )}
           </div>
-          <div>
-            {bundle.build_strategy === "custom" ? (
-              <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: 600, background: "#e3f2fd", color: "#1565c0" }}>
-                Custom Build
-              </span>
+
+          {bundle.description && (
+            <div style={{ marginTop: "var(--spacing-md)" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Description
+              </div>
+              <div style={{ lineHeight: 1.6 }}>{bundle.description}</div>
+            </div>
+          )}
+
+          <div style={{ marginTop: "var(--spacing-md)" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Data Resources
+            </div>
+            {bundle.resource_identifiers.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: "var(--spacing-lg)" }}>
+                {bundle.resource_identifiers.map((id) => (
+                  <li key={id} style={{ marginBottom: "var(--spacing-xs)" }}>{id}</li>
+                ))}
+              </ul>
             ) : (
-              <span>Institutional Build</span>
+              <div style={{ color: "var(--color-text-secondary)" }}>None selected</div>
             )}
           </div>
         </div>
 
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Version
+        <div
+          className="card"
+          style={{
+            marginBottom: "var(--spacing-lg)",
+            border: "1px dashed var(--color-border)",
+            background: "var(--color-bg)",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--color-text-secondary)",
+              marginBottom: "var(--spacing-sm)",
+            }}
+          >
+            Files
+          </h3>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", fontStyle: "italic" }}>
+            File management will be available in a future update.
           </div>
-          <div>{bundle.version}</div>
         </div>
 
-        {bundle.description && (
-          <div style={{ marginBottom: "var(--spacing-md)" }}>
-            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Description
+        <div
+          className="card"
+          style={{
+            marginBottom: "var(--spacing-lg)",
+            border: "1px dashed var(--color-border)",
+            background: "var(--color-bg)",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--color-text-secondary)",
+              marginBottom: "var(--spacing-sm)",
+            }}
+          >
+            Readiness
+          </h3>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", fontStyle: "italic" }}>
+            Readiness checks will be available in a future update.
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
+          <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
+            AI Analysis Summary
+          </h3>
+
+          {bundle.ai_review === null && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Not available for this deployment</div>
             </div>
-            <div style={{ lineHeight: 1.6 }}>{bundle.description}</div>
-          </div>
-        )}
+          )}
 
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Interpreter
-          </div>
-          <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
-        </div>
-
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Entrypoint
-          </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint}</div>
-        </div>
-
-        {bundle.arguments && (
-          <div style={{ marginBottom: "var(--spacing-md)" }}>
-            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Arguments
+          {bundle.ai_review?.status === "pending" && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Status: Pending</div>
             </div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.arguments}</div>
-          </div>
-        )}
+          )}
 
-        <div style={{ marginBottom: "var(--spacing-md)" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Data Resources
-          </div>
-          {bundle.resource_identifiers.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: "var(--spacing-lg)" }}>
-              {bundle.resource_identifiers.map((id) => (
-                <li key={id} style={{ marginBottom: "var(--spacing-xs)" }}>{id}</li>
-              ))}
-            </ul>
-          ) : (
-            <div style={{ color: "var(--color-text-secondary)" }}>None</div>
+          {bundle.ai_review?.status === "completed" && (
+            <>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Status
+                </div>
+                <div>Completed</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Summary
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.summary}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Assessment
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.assessment}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Assessment Confidence
+                </div>
+                <div>{bundle.ai_review.assessment_confidence}</div>
+              </div>
+              <div style={{ marginBottom: "var(--spacing-md)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Reviewer Notes
+                </div>
+                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.reviewer_notes}</div>
+              </div>
+            </>
+          )}
+
+          {(bundle.ai_review?.status === "unavailable" || bundle.ai_review?.status === "failed") && (
+            <div style={{ marginBottom: "var(--spacing-md)" }}>
+              <div>Status: Unavailable</div>
+            </div>
+          )}
+
+          {bundle.ai_review?.status !== "pending" && (
+            <button
+              className="btn"
+              onClick={handleTriggerReview}
+              disabled={reviewing}
+            >
+              {reviewing ? "Processing..." : reviewActionLabel()}
+            </button>
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "var(--spacing-xl)", paddingTop: "var(--spacing-md)", borderTop: "1px solid var(--color-border)" }}>
+        <div style={{ display: "flex", gap: "var(--spacing-xl)", marginBottom: "var(--spacing-lg)", color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
           <div>
-            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Created
-            </div>
-            <div>{new Date(bundle.created_at).toLocaleDateString()}</div>
+            <span style={{ fontWeight: 600 }}>Created</span>: {new Date(bundle.created_at).toLocaleDateString()}
           </div>
           <div>
-            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Updated
-            </div>
-            <div>{new Date(bundle.updated_at).toLocaleDateString()}</div>
+            <span style={{ fontWeight: 600 }}>Updated</span>: {new Date(bundle.updated_at).toLocaleDateString()}
           </div>
         </div>
-      </div>
-
-      <div className="card" style={{ maxWidth: "640px", marginTop: "var(--spacing-lg)" }}>
-        <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
-          AI Analysis Summary
-        </h3>
-
-        {bundle.ai_review === null && (
-          <div style={{ marginBottom: "var(--spacing-md)" }}>
-            <div>Not available for this deployment</div>
-          </div>
-        )}
-
-        {bundle.ai_review?.status === "pending" && (
-          <div style={{ marginBottom: "var(--spacing-md)" }}>
-            <div>Status: Pending</div>
-          </div>
-        )}
-
-        {bundle.ai_review?.status === "completed" && (
-          <>
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Status
-              </div>
-              <div>Completed</div>
-            </div>
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Summary
-              </div>
-              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.summary}</div>
-            </div>
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Assessment
-              </div>
-              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.assessment}</div>
-            </div>
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Assessment Confidence
-              </div>
-              <div>{bundle.ai_review.assessment_confidence}</div>
-            </div>
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Reviewer Notes
-              </div>
-              <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.reviewer_notes}</div>
-            </div>
-          </>
-        )}
-
-        {(bundle.ai_review?.status === "unavailable" || bundle.ai_review?.status === "failed") && (
-          <div style={{ marginBottom: "var(--spacing-md)" }}>
-            <div>Status: Unavailable</div>
-          </div>
-        )}
-
-        {bundle.ai_review?.status !== "pending" && (
-          <button
-            className="btn"
-            onClick={handleTriggerReview}
-            disabled={reviewing}
-          >
-            {reviewing ? "Processing..." : reviewActionLabel()}
-          </button>
-        )}
       </div>
     </div>
   );
