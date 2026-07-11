@@ -397,6 +397,98 @@ export async function detachProjectResource(
   });
 }
 
+export interface BundleFile {
+  path: string;
+  size: number;
+}
+
+export interface BundleFileList {
+  files: BundleFile[];
+  total_size: number;
+}
+
+export async function getBundleFiles(
+  projectId: string,
+  bundleId: string,
+): Promise<BundleFileList> {
+  return request<BundleFileList>(`/api/projects/${projectId}/bundles/${bundleId}/files`);
+}
+
+export async function uploadBundleZip(
+  projectId: string,
+  bundleId: string,
+  file: File,
+): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`/api/projects/${projectId}/bundles/${bundleId}/files/upload`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b) => b.detail).catch(() => "Upload failed");
+    throw new Error(detail);
+  }
+}
+
+export async function importBundleZip(
+  projectId: string,
+  bundleId: string,
+  file: File,
+): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`/api/projects/${projectId}/bundles/${bundleId}/files/import`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b) => b.detail).catch(() => "Import failed");
+    throw new Error(detail);
+  }
+}
+
+export async function uploadBundleFile(
+  projectId: string,
+  bundleId: string,
+  file: File,
+): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`/api/projects/${projectId}/bundles/${bundleId}/files/single`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b) => b.detail).catch(() => "Upload failed");
+    throw new Error(detail);
+  }
+}
+
+export async function deleteBundleFile(
+  projectId: string,
+  bundleId: string,
+  path: string,
+): Promise<void> {
+  await fetch(`/api/projects/${projectId}/bundles/${bundleId}/files/${encodeURIComponent(path)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
+export async function clearBundleFiles(
+  projectId: string,
+  bundleId: string,
+): Promise<void> {
+  await fetch(`/api/projects/${projectId}/bundles/${bundleId}/files`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
 export async function getProjectBundle(
   projectId: string,
   bundleId: string,

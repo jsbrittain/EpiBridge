@@ -97,41 +97,55 @@ test("Canonical Workflow", async ({ page }) => {
   await page.getByRole("link", { name: "Analysis" }).click();
   await expect(page.getByTestId("analysis-heading")).toBeVisible();
 
-  // Navigate to Create Analysis
+  // Create a new Draft Bundle — immediately creates an Untitled bundle
   await page.getByRole("button", { name: "New Draft Bundle" }).click();
 
-  // Fill the form
-  await page.getByLabel("Name").fill(analysisName);
-  await page.getByLabel("Version").fill("1.0.0");
-  await page.getByLabel("Entrypoint").fill("run.py");
-  await page.getByLabel("Interpreter").selectOption("Python");
-  await page
-    .getByLabel("Execution Environment")
-    .selectOption({ label: "Python 3.13" });
-  await page.getByText("mex-dengue-2026").click();
+  // Wait for redirect to the bundle workspace
+  await page.waitForURL(/\/projects\/[^/]+\/analysis\/[^/]+$/);
+  await expect(page.getByText("Draft — Editable")).toBeVisible();
 
-  // Upload the analysis bundle ZIP
+  // Rename the draft
+  await page.locator('input[type="text"]').first().fill(analysisName);
+
+  // Upload the analysis bundle ZIP via the workspace file upload
   const zipBuffer = createZip([
     { name: "run.py", content: ANALYSIS_CODE },
     { name: "requirements.txt", content: "" },
   ]);
+  await page.getByRole("button", { name: "Upload ZIP" }).click();
+  await page.getByText("Upload ZIP").click();
   await page.locator('input[type="file"]').setInputFiles({
     name: "analysis-bundle.zip",
     mimeType: "application/zip",
     buffer: zipBuffer,
   });
 
-  // Save
-  await page.getByRole("button", { name: "Save" }).click();
+  // Configure execution settings inline in the workspace
+  await page.getByLabel("Environment").selectOption({ label: "Python 3.13" });
+  await page.locator("#edit-version-exec").fill("1.0.0");
 
-  // Wait for redirect to analysis list, then open the bundle
+  // Wait for file listing to load then select entrypoint
+  await page.waitForTimeout(1000);
+  // Entrypoint candidates should include run.py
+  const entrypointSelect = page.locator("select").filter({ has: page.locator('option[value="run.py"]') }).first();
+  if (await entrypointSelect.isVisible()) {
+    await entrypointSelect.selectOption("run.py");
+  }
+  await page.getByLabel("Interpreter").selectOption("Python");
+
+  // Select the data resource for this bundle
+  await page.getByText("(mex-dengue-2026)").click();
+
+  // Save the draft
+  await page.getByRole("button", { name: "Save and Close" }).click();
   await page.waitForURL(/\/projects\/[^/]+\/analysis$/);
-  await expect(page.getByTestId("analysis-heading")).toBeVisible();
-  await expect(page.getByText(analysisName)).toBeVisible();
+
+  // Re-open the draft from the list
   await page.getByText(analysisName).click();
+  await page.waitForURL(/\/projects\/[^/]+\/analysis\/[^/]+$/);
 
   // Submit the bundle (DRAFT → SUBMITTED) via the Submit button
-  await page.getByRole("button", { name: "Submit" }).click();
+  await page.getByRole("button", { name: "Submit for Review" }).click();
   await expect(page.getByText("Submitted")).toBeVisible();
 
   // Approve the bundle (SUBMITTED → APPROVED_FOR_EXECUTION) via the Approve button

@@ -74,17 +74,12 @@ test("Custom Build Workflow", async ({ page }) => {
   await page.getByRole("link", { name: "Analysis" }).click();
   await page.getByRole("button", { name: "New Draft Bundle" }).click();
 
-  // 6. Fill the form
-  await page.getByLabel("Name").fill(analysisName);
-  await page.getByLabel("Version").fill("2.0.0");
-  await page.getByLabel("Entrypoint").fill("run.py");
-  await page.getByLabel("Interpreter").selectOption("Python");
-  await page
-    .getByLabel("Execution Environment")
-    .selectOption({ label: "Python 3.13" });
+  // 6. Wait for redirect to the bundle workspace
+  await page.waitForURL(/\/projects\/[^/]+\/analysis\/[^/]+$/);
+  await expect(page.getByText("Draft — Editable")).toBeVisible();
 
-  // 7. Select Custom Build strategy
-  await page.getByLabel("Build Strategy").selectOption("Custom Build");
+  // 7. Rename the draft
+  await page.locator('input[type="text"]').first().fill(analysisName);
 
   // 8. Upload the analysis bundle ZIP containing the custom Dockerfile
   const zipBuffer = createZip([
@@ -92,26 +87,40 @@ test("Custom Build Workflow", async ({ page }) => {
     { name: "requirements.txt", content: "" },
     { name: "build/Dockerfile", content: CUSTOM_DOCKERFILE },
   ]);
+  await page.getByRole("button", { name: "Upload ZIP" }).click();
+  await page.getByText("Upload ZIP").click();
   await page.locator('input[type="file"]').setInputFiles({
     name: "custom-build-bundle.zip",
     mimeType: "application/zip",
     buffer: zipBuffer,
   });
 
-  // 9. Save
-  await page.getByRole("button", { name: "Save" }).click();
+  // 9. Configure execution settings inline in the workspace
+  await page.getByLabel("Environment").selectOption({ label: "Python 3.13" });
+  await page.locator("#edit-version-exec").fill("2.0.0");
 
-  // 10. Wait for redirect and open the bundle
+  // Wait for file listing to load then select entrypoint
+  await page.waitForTimeout(1000);
+  const entrypointSelect = page.locator("select").filter({ has: page.locator('option[value="run.py"]') }).first();
+  if (await entrypointSelect.isVisible()) {
+    await entrypointSelect.selectOption("run.py");
+  }
+  await page.getByLabel("Interpreter").selectOption("Python");
+  await page.getByLabel("Build Strategy").selectOption("Custom Build");
+
+  // 10. Save the draft
+  await page.getByRole("button", { name: "Save and Close" }).click();
   await page.waitForURL(/\/projects\/[^/]+\/analysis$/);
-  await expect(page.getByTestId("analysis-heading")).toBeVisible();
-  await expect(page.getByText(analysisName)).toBeVisible();
+
+  // 11. Re-open the draft from the list
   await page.getByText(analysisName).click();
+  await page.waitForURL(/\/projects\/[^/]+\/analysis\/[^/]+$/);
 
-  // 11. Verify Build Strategy shows Custom Build
-  await expect(page.getByText("Custom Build", { exact: true })).toBeVisible();
+  // 12. Verify Build Strategy was saved as Custom Build
+  await expect(page.locator("#edit-build-strategy")).toHaveValue("custom");
 
-  // 12. Submit the bundle (DRAFT → SUBMITTED)
-  await page.getByRole("button", { name: "Submit" }).click();
+  // 13. Submit the bundle (DRAFT → SUBMITTED)
+  await page.getByRole("button", { name: "Submit for Review" }).click();
   await expect(page.getByText("Submitted")).toBeVisible();
 
   // 13. Approve the bundle (SUBMITTED → APPROVED_FOR_EXECUTION)

@@ -318,6 +318,15 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         transition_to(db, request, ExecutionRequestStatus.FAILED, "bundle not found")
         return
 
+    if bundle.execution_environment_id is None:
+        request.log = (
+            f"[{ts}] EXECUTION FAILED: no execution environment configured"
+        )
+        db.commit()
+        _emit_execution_event(db, AuditEventType.EXECUTION_FAILED, request, {"failure_reason": "no execution environment configured"})
+        transition_to(db, request, ExecutionRequestStatus.FAILED, "no execution environment configured")
+        return
+
     env = db.query(ExecutionEnvironment).get(bundle.execution_environment_id)
     if env is None:
         request.log = f"[{ts}] EXECUTION FAILED: environment not found"
@@ -358,6 +367,15 @@ def execute_request(db: Session, request: ExecutionRequest) -> None:
         return
 
     entrypoint = bundle.entrypoint
+    if not entrypoint:
+        request.log = (
+            f"[{ts}] EXECUTION FAILED: no entrypoint configured"
+        )
+        db.commit()
+        _emit_execution_event(db, AuditEventType.EXECUTION_FAILED, request, {"failure_reason": "no entrypoint configured"})
+        transition_to(db, request, ExecutionRequestStatus.FAILED, "no entrypoint configured")
+        return
+
     interpreter_str = bundle.interpreter or "python"
     try:
         interpreter = Interpreter(interpreter_str)

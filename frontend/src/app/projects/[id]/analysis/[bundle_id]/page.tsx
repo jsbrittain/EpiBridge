@@ -1,17 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import {
   AnalysisBundle,
+  BundleFile,
+  DataResource,
+  ExecutionEnvironment,
   getProjectBundle,
+  getProjectResources,
+  getBundleFiles,
+  getExecutionEnvironments,
+  uploadBundleZip,
+  importBundleZip,
+  uploadBundleFile,
+  deleteBundleFile,
+  clearBundleFiles,
   submitBundle,
   approveBundle,
   rejectBundle,
   supersedeBundle,
   createExecutionRequest,
+  updateProjectBundle,
   triggerAiReview,
   checkResourceTerms,
 } from "@/lib/api";
@@ -35,10 +47,43 @@ export default function AnalysisDetailPage() {
   const [reviewing, setReviewing] = useState(false);
   const [termsResourceId, setTermsResourceId] = useState<string | null>(null);
   const [termsResourceName, setTermsResourceName] = useState<string>("");
+  const [bundleFiles, setBundleFiles] = useState<BundleFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"zip" | "import" | "single" | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [environments, setEnvironments] = useState<ExecutionEnvironment[]>([]);
+  const [projectResources, setProjectResources] = useState<DataResource[]>([]);
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [savingDraft, setSavingDraft] = useState(false);
+
+  const initializedRef = useRef(false);
+
+  // Workspace form state
+  const [editName, setEditName] = useState("");
+  const [editEnvId, setEditEnvId] = useState("");
+  const [editEntrypoint, setEditEntrypoint] = useState("");
+  const [editInterpreter, setEditInterpreter] = useState("python");
+  const [editArguments, setEditArguments] = useState("");
+  const [editBuildStrategy, setEditBuildStrategy] = useState("institutional");
+  const [editVersion, setEditVersion] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   const fetchBundle = useCallback(async () => {
     const b = await getProjectBundle(projectId, bundleId);
     setBundle(b);
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      setEditName(b.name);
+      setEditEnvId(b.execution_environment_id || "");
+      setEditEntrypoint(b.entrypoint);
+      setEditInterpreter(b.interpreter || "python");
+      setEditArguments(b.arguments || "");
+      setEditBuildStrategy(b.build_strategy || "institutional");
+      setEditVersion(b.version);
+      setEditDescription(b.description);
+      setSelectedResources(b.resource_identifiers);
+    }
     return b;
   }, [projectId, bundleId]);
 
@@ -62,7 +107,8 @@ export default function AnalysisDetailPage() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const updated = await fetchBundle();
+        const updated = await getProjectBundle(projectId, bundleId);
+        setBundle(updated);
         if (
           updated.ai_review &&
           TERMINAL_STATUSES.includes(updated.ai_review.status) &&
@@ -91,7 +137,11 @@ export default function AnalysisDetailPage() {
   const BUILD_TERMINAL = ["environment_ready", "environment_build_failed"];
 
   useEffect(() => {
-    if (!bundle || BUILD_TERMINAL.includes(bundle.build_status)) {
+    const shouldPoll =
+      bundle &&
+      bundle.status === "approved_for_execution" &&
+      !BUILD_TERMINAL.includes(bundle.build_status);
+    if (!shouldPoll) {
       if (buildPollRef.current) {
         clearInterval(buildPollRef.current);
         buildPollRef.current = null;
@@ -101,7 +151,8 @@ export default function AnalysisDetailPage() {
 
     buildPollRef.current = setInterval(async () => {
       try {
-        const updated = await fetchBundle();
+        const updated = await getProjectBundle(projectId, bundleId);
+        setBundle(updated);
         if (BUILD_TERMINAL.includes(updated.build_status) && buildPollRef.current) {
           clearInterval(buildPollRef.current);
           buildPollRef.current = null;
@@ -120,7 +171,7 @@ export default function AnalysisDetailPage() {
         buildPollRef.current = null;
       }
     };
-  }, [bundle?.build_status, fetchBundle]);
+  }, [bundle?.status, bundle?.build_status, projectId, bundleId]);
 
   const performAction = async (
     label: string,
@@ -138,9 +189,29 @@ export default function AnalysisDetailPage() {
   };
 
   const handleSubmit = async () => {
-    if (bundle && bundle.resource_identifiers.length > 0) {
+    // Save pending changes first
+    try {
+      await updateProjectBundle(projectId, bundleId, {
+        name: editName,
+        execution_environment_id: editEnvId || undefined,
+        entrypoint: editEntrypoint || undefined,
+        interpreter: editInterpreter as any,
+        arguments: editArguments || undefined,
+        build_strategy: editBuildStrategy,
+        version: editVersion || undefined,
+        description: editDescription || undefined,
+        resource_identifiers: selectedResources.length > 0 ? selectedResources : undefined,
+      });
+    } catch {
+      setError("Failed to save changes before submission");
+      return;
+    }
+
+    // Re-fetch to get fresh resource identifiers for terms check
+    const fresh = await getProjectBundle(projectId, bundleId);
+    if (fresh.resource_identifiers.length > 0) {
       try {
-        const result = await checkResourceTerms(bundle.resource_identifiers);
+        const result = await checkResourceTerms(fresh.resource_identifiers);
         const unaccepted = result.results.filter(
           (r) => r.has_terms && !r.accepted,
         );
@@ -186,6 +257,142 @@ export default function AnalysisDetailPage() {
     } catch {
       setError("Failed to create execution request");
       setActionLoading(null);
+    }
+  };
+
+  const loadFiles = useCallback(async () => {
+    setFilesLoading(true);
+    setFileError(null);
+    try {
+      const result = await getBundleFiles(projectId, bundleId);
+      setBundleFiles(result.files);
+    } catch {
+      setBundleFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  }, [projectId, bundleId]);
+
+  useEffect(() => {
+    if (bundle) {
+      loadFiles();
+    }
+  }, [bundle?.source_path, loadFiles]);
+
+  const handleFileUploadZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setFileError(null);
+    try {
+      await uploadBundleZip(projectId, bundleId, file);
+      await loadFiles();
+      await fetchBundle();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadMode(null);
+      e.target.value = "";
+    }
+  };
+
+  const handleFileImportZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setFileError(null);
+    try {
+      await importBundleZip(projectId, bundleId, file);
+      await loadFiles();
+      await fetchBundle();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setUploading(false);
+      setUploadMode(null);
+      e.target.value = "";
+    }
+  };
+
+  const handleFileUploadSingle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setFileError(null);
+    try {
+      await uploadBundleFile(projectId, bundleId, file);
+      await loadFiles();
+      await fetchBundle();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadMode(null);
+      e.target.value = "";
+    }
+  };
+
+  const handleDeleteFile = async (path: string) => {
+    setFileError(null);
+    try {
+      await deleteBundleFile(projectId, bundleId, path);
+      await loadFiles();
+      await fetchBundle();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Failed to delete file");
+    }
+  };
+
+  const handleClearFiles = async () => {
+    setFileError(null);
+    try {
+      await clearBundleFiles(projectId, bundleId);
+      await loadFiles();
+      await fetchBundle();
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Failed to clear files");
+    }
+  };
+
+  useEffect(() => {
+    if (bundle?.status === "draft") {
+      getExecutionEnvironments().then(setEnvironments).catch(() => {});
+      getProjectResources(projectId)
+        .then(setProjectResources)
+        .catch(() => {});
+    }
+  }, [bundle?.status, projectId]);
+
+  // Entrypoint candidates from files
+  const entrypointCandidates = useMemo(() => {
+    const candidates = bundleFiles.filter((f) => {
+      const topLevel = !f.path.includes("/");
+      const ext = f.path.split(".").pop()?.toLowerCase();
+      return topLevel && (ext === "py" || ext === "r" || ext === "sh");
+    });
+    return candidates.map((f) => f.path);
+  }, [bundleFiles]);
+
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    setError(null);
+    try {
+      await updateProjectBundle(projectId, bundleId, {
+        name: editName,
+        execution_environment_id: editEnvId || undefined,
+        entrypoint: editEntrypoint || undefined,
+        interpreter: editInterpreter as any,
+        arguments: editArguments || undefined,
+        build_strategy: editBuildStrategy,
+        version: editVersion || undefined,
+        description: editDescription || undefined,
+        resource_identifiers: selectedResources.length > 0 ? selectedResources : undefined,
+      });
+      router.push(`/projects/${projectId}/analysis`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save draft");
+      setSavingDraft(false);
     }
   };
 
@@ -512,22 +719,24 @@ export default function AnalysisDetailPage() {
       >
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 600, margin: 0 }}>
-              {bundle.name}
-            </h2>
-            <span
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              autoFocus
               style={{
-                display: "inline-block",
-                padding: "2px 8px",
-                borderRadius: "4px",
-                fontSize: "0.8rem",
+                fontSize: "1.1rem",
                 fontWeight: 600,
-                background: "#edf4ff",
-                color: "#1565c0",
+                border: "none",
+                borderBottom: "2px solid transparent",
+                padding: "2px 0",
+                outline: "none",
+                background: "transparent",
+                color: "inherit",
+                width: "300px",
               }}
-            >
-              Workspace
-            </span>
+              onFocus={(e) => e.target.select()}
+            />
           </div>
           <span
             style={{
@@ -544,6 +753,13 @@ export default function AnalysisDetailPage() {
         </div>
         <div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-xs)" }}>
+            <button
+              className="btn"
+              onClick={handleSaveDraft}
+              disabled={savingDraft}
+            >
+              {savingDraft ? "Saving..." : "Save and Close"}
+            </button>
             {user?.capabilities.includes("bundle.submit") && (
               <button
                 className="btn btn-primary"
@@ -571,49 +787,269 @@ export default function AnalysisDetailPage() {
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               color: "var(--color-text-secondary)",
-              marginBottom: "var(--spacing-sm)",
+              marginBottom: "var(--spacing-md)",
             }}
           >
             Overview
           </h3>
-          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
-            {bundle.description
-              ? bundle.description
-              : "No description provided."}
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <label
+              htmlFor="edit-description"
+              style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+            >
+              Description
+            </label>
+            <textarea
+              id="edit-description"
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={2}
+              placeholder="Optional description of your analysis"
+              style={{
+                width: "100%",
+                padding: "var(--spacing-xs) var(--spacing-sm)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.9rem",
+                resize: "vertical",
+              }}
+            />
           </div>
-          <div style={{ display: "flex", gap: "var(--spacing-xl)", marginTop: "var(--spacing-md)", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-            <div><span style={{ fontWeight: 600 }}>Version</span>: {bundle.version || "—"}</div>
-            <div><span style={{ fontWeight: 600 }}>Created</span>: {new Date(bundle.created_at).toLocaleDateString()}</div>
+
+          <div style={{ display: "flex", gap: "var(--spacing-xl)" }}>
+            <div>
+              <label
+                htmlFor="edit-version-overview"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
+                Version
+              </label>
+              <input
+                id="edit-version-overview"
+                type="text"
+                value={editVersion}
+                onChange={(e) => setEditVersion(e.target.value)}
+                placeholder="1.0.0"
+                style={{
+                  width: "120px",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                }}
+              />
+            </div>
+            <div style={{ paddingTop: "1.4rem", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
+              <span style={{ fontWeight: 600 }}>Created</span>: {new Date(bundle.created_at).toLocaleDateString()}
+            </div>
           </div>
         </div>
 
-        <div
-          className="card"
-          style={{
-            marginBottom: "var(--spacing-lg)",
-            border: bundle.source_path ? undefined : "1px dashed var(--color-border)",
-            background: bundle.source_path ? undefined : "var(--color-bg)",
-          }}
-        >
-          <h3
-            style={{
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              color: "var(--color-text-secondary)",
-              marginBottom: "var(--spacing-sm)",
-            }}
-          >
-            Files
-          </h3>
-          {bundle.source_path ? (
+        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-sm)" }}>
+            <h3
+              style={{
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "var(--color-text-secondary)",
+                margin: 0,
+              }}
+            >
+              Files
+            </h3>
+            <div style={{ display: "flex", gap: "var(--spacing-xs)" }}>
+              {uploadMode === null && !uploading && (
+                <>
+                  <button
+                    className="btn"
+                    style={{ fontSize: "0.8rem", padding: "2px 10px" }}
+                    onClick={() => setUploadMode("zip")}
+                  >
+                    Upload ZIP
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ fontSize: "0.8rem", padding: "2px 10px" }}
+                    onClick={() => setUploadMode("single")}
+                  >
+                    Add File
+                  </button>
+                  {bundleFiles.length > 0 && (
+                    <button
+                      className="btn"
+                      style={{ fontSize: "0.8rem", padding: "2px 10px", color: "#d32f2f" }}
+                      onClick={handleClearFiles}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {fileError && (
+            <div style={{ color: "#d32f2f", fontSize: "0.85rem", marginBottom: "var(--spacing-sm)" }}>
+              {fileError}
+            </div>
+          )}
+
+          {uploading && (
+            <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", marginBottom: "var(--spacing-sm)" }}>
+              Uploading...
+            </div>
+          )}
+
+          {uploadMode === "zip" && (
+            <div style={{ marginBottom: "var(--spacing-sm)" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)" }}>
+                Replace all bundle contents with a ZIP archive:
+              </div>
+              <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+                <label
+                  className="btn btn-primary"
+                  style={{ fontSize: "0.85rem", padding: "4px 12px", cursor: "pointer" }}
+                >
+                  {bundleFiles.length > 0 ? "Replace from ZIP" : "Upload ZIP"}
+                  <input
+                    type="file"
+                    accept=".zip"
+                    style={{ display: "none" }}
+                    onChange={handleFileUploadZip}
+                    disabled={uploading}
+                  />
+                </label>
+                <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
+                  or{" "}
+                  <button
+                    className="btn"
+                    style={{ fontSize: "0.8rem", padding: "2px 8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-primary)", textDecoration: "underline" }}
+                    onClick={() => setUploadMode("import")}
+                  >
+                    import into existing files
+                  </button>
+                </span>
+                <button
+                  className="btn"
+                  style={{ fontSize: "0.8rem", padding: "2px 8px" }}
+                  onClick={() => setUploadMode(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {uploadMode === "import" && (
+            <div style={{ marginBottom: "var(--spacing-sm)" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)" }}>
+                Import additional files from a ZIP archive (new files will be added, existing files with the same name will be replaced):
+              </div>
+              <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+                <label
+                  className="btn btn-primary"
+                  style={{ fontSize: "0.85rem", padding: "4px 12px", cursor: "pointer" }}
+                >
+                  Import ZIP
+                  <input
+                    type="file"
+                    accept=".zip"
+                    style={{ display: "none" }}
+                    onChange={handleFileImportZip}
+                    disabled={uploading}
+                  />
+                </label>
+                <button
+                  className="btn"
+                  style={{ fontSize: "0.8rem", padding: "2px 8px" }}
+                  onClick={() => setUploadMode(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {uploadMode === "single" && (
+            <div style={{ marginBottom: "var(--spacing-sm)" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)" }}>
+                Upload a single file:
+              </div>
+              <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+                <label
+                  className="btn btn-primary"
+                  style={{ fontSize: "0.85rem", padding: "4px 12px", cursor: "pointer" }}
+                >
+                  Choose File
+                  <input
+                    type="file"
+                    style={{ display: "none" }}
+                    onChange={handleFileUploadSingle}
+                    disabled={uploading}
+                  />
+                </label>
+                <button
+                  className="btn"
+                  style={{ fontSize: "0.8rem", padding: "2px 8px" }}
+                  onClick={() => setUploadMode(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {filesLoading ? (
             <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
-              Analysis code uploaded. File browsing will be available in a future update.
+              Loading files...
+            </div>
+          ) : bundleFiles.length > 0 ? (
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-sm)" }}>
+                {bundleFiles.length} file{bundleFiles.length !== 1 ? "s" : ""} —
+                {bundleFiles.reduce((sum, f) => sum + f.size, 0) > 1024
+                  ? `${(bundleFiles.reduce((sum, f) => sum + f.size, 0) / 1024).toFixed(1)} KB`
+                  : `${bundleFiles.reduce((sum, f) => sum + f.size, 0)} bytes`}
+              </div>
+              <table className="table" style={{ fontSize: "0.85rem" }}>
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Size</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bundleFiles.map((f) => (
+                    <tr key={f.path}>
+                      <td style={{ fontWeight: 500, fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}>
+                        {f.path}
+                      </td>
+                      <td style={{ color: "var(--color-text-secondary)" }}>
+                        {f.size > 1024
+                          ? `${(f.size / 1024).toFixed(1)} KB`
+                          : `${f.size} bytes`}
+                      </td>
+                      <td>
+                        <button
+                          className="btn"
+                          style={{ fontSize: "0.75rem", padding: "1px 6px", color: "#d32f2f" }}
+                          onClick={() => handleDeleteFile(f.path)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
-              No files uploaded yet. Upload a ZIP archive containing your analysis code to get started.
+              No files uploaded yet. Upload a ZIP archive containing your analysis code to get started, or add individual files.
             </div>
           )}
         </div>
@@ -627,8 +1063,6 @@ export default function AnalysisDetailPage() {
               letterSpacing: "0.05em",
               color: "var(--color-text-secondary)",
               marginBottom: "var(--spacing-md)",
-              paddingBottom: "var(--spacing-sm)",
-              borderBottom: "1px solid var(--color-border)",
             }}
           >
             Execution
@@ -636,64 +1070,212 @@ export default function AnalysisDetailPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
             <div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <label
+                htmlFor="edit-env"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
                 Environment
-              </div>
-              <div>{bundle.display_runtime}</div>
+              </label>
+              <select
+                id="edit-env"
+                value={editEnvId}
+                onChange={(e) => setEditEnvId(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                  background: "var(--color-bg)",
+                }}
+              >
+                <option value="">Select environment...</option>
+                {environments.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.display_name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <label
+                htmlFor="edit-build-strategy"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
                 Build Strategy
-              </div>
-              <div>
-                {bundle.build_strategy === "custom" ? (
-                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: 600, background: "#e3f2fd", color: "#1565c0" }}>
-                    Custom Build
-                  </span>
-                ) : (
-                  <span>Institutional Build</span>
+              </label>
+              <select
+                id="edit-build-strategy"
+                value={editBuildStrategy}
+                onChange={(e) => setEditBuildStrategy(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                  background: "var(--color-bg)",
+                }}
+              >
+                <option value="institutional">Institutional Build</option>
+                {user?.capabilities.includes("build.customize") && (
+                  <option value="custom">Custom Build</option>
                 )}
-              </div>
+              </select>
             </div>
 
             <div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <label
+                htmlFor="edit-entrypoint"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
                 Entrypoint
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint || "Not configured"}</div>
+              </label>
+              {bundleFiles.length > 0 && entrypointCandidates.length > 0 ? (
+                <select
+                  id="edit-entrypoint"
+                  value={editEntrypoint}
+                  onChange={(e) => setEditEntrypoint(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "var(--spacing-xs) var(--spacing-sm)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.9rem",
+                    background: "var(--color-bg)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  <option value="">Select entrypoint...</option>
+                  {entrypointCandidates.map((ep) => (
+                    <option key={ep} value={ep}>
+                      {ep}
+                    </option>
+                  ))}
+                </select>
+              ) : bundleFiles.length > 0 ? (
+                <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", fontStyle: "italic" }}>
+                  No entrypoint candidates detected. Add a .py, .R, or .sh file at the top level.
+                </div>
+              ) : (
+                <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", fontStyle: "italic" }}>
+                  Upload files to select an entrypoint.
+                </div>
+              )}
             </div>
 
             <div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <label
+                htmlFor="edit-interpreter"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
                 Interpreter
-              </div>
-              <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
+              </label>
+              <select
+                id="edit-interpreter"
+                value={editInterpreter}
+                onChange={(e) => setEditInterpreter(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                  background: "var(--color-bg)",
+                }}
+              >
+                <option value="python">Python</option>
+                <option value="shell">Shell</option>
+                <option value="r">R</option>
+              </select>
             </div>
 
-            {bundle.arguments && (
-              <div>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Arguments
-                </div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.arguments}</div>
-              </div>
-            )}
+            <div>
+              <label
+                htmlFor="edit-version-exec"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
+                Version
+              </label>
+              <input
+                id="edit-version-exec"
+                type="text"
+                value={editVersion}
+                onChange={(e) => setEditVersion(e.target.value)}
+                placeholder="1.0.0"
+                style={{
+                  width: "100%",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="edit-arguments"
+                style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", display: "block" }}
+              >
+                Arguments
+              </label>
+              <input
+                id="edit-arguments"
+                type="text"
+                value={editArguments}
+                onChange={(e) => setEditArguments(e.target.value)}
+                placeholder="--verbose"
+                style={{
+                  width: "100%",
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.9rem",
+                }}
+              />
+            </div>
           </div>
 
           <div style={{ marginTop: "var(--spacing-md)" }}>
             <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Data Resources
             </div>
-            {bundle.resource_identifiers.length > 0 ? (
-              <ul style={{ margin: 0, paddingLeft: "var(--spacing-lg)" }}>
-                {bundle.resource_identifiers.map((id) => (
-                  <li key={id} style={{ marginBottom: "var(--spacing-xs)" }}>{id}</li>
+            {projectResources.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+                {projectResources.map((r) => (
+                  <label
+                    key={r.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--spacing-sm)",
+                      fontSize: "0.9rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedResources.includes(r.identifier)}
+                      onChange={() =>
+                        setSelectedResources((prev) =>
+                          prev.includes(r.identifier)
+                            ? prev.filter((id) => id !== r.identifier)
+                            : [...prev, r.identifier]
+                        )
+                      }
+                    />
+                    {r.name}
+                    <span style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem" }}>
+                      ({r.identifier})
+                    </span>
+                  </label>
                 ))}
-              </ul>
+              </div>
             ) : (
               <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
-                No data resources selected. Attach resources from the project Resources tab before submission.
+                No data resources allocated to this project. Add resources from the project Resources tab.
               </div>
             )}
           </div>
@@ -720,77 +1302,8 @@ export default function AnalysisDetailPage() {
             Readiness
           </h3>
           <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
-            To submit your analysis for institutional review, ensure the following are configured: analysis files, execution environment, entrypoint, and data resources. Readiness checks will be available in a future update.
+            To submit your analysis for institutional review, ensure the following are configured: analysis files, execution environment, entrypoint, and data resources. Save your draft to persist changes.
           </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
-            AI Analysis Summary
-          </h3>
-
-          {bundle.ai_review === null && (
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div>Not available for this deployment</div>
-            </div>
-          )}
-
-          {bundle.ai_review?.status === "pending" && (
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div>Status: Pending</div>
-            </div>
-          )}
-
-          {bundle.ai_review?.status === "completed" && (
-            <>
-              <div style={{ marginBottom: "var(--spacing-md)" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Status
-                </div>
-                <div>Completed</div>
-              </div>
-              <div style={{ marginBottom: "var(--spacing-md)" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Summary
-                </div>
-                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.summary}</div>
-              </div>
-              <div style={{ marginBottom: "var(--spacing-md)" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Assessment
-                </div>
-                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.assessment}</div>
-              </div>
-              <div style={{ marginBottom: "var(--spacing-md)" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Assessment Confidence
-                </div>
-                <div>{bundle.ai_review.assessment_confidence}</div>
-              </div>
-              <div style={{ marginBottom: "var(--spacing-md)" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Reviewer Notes
-                </div>
-                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{bundle.ai_review.reviewer_notes}</div>
-              </div>
-            </>
-          )}
-
-          {(bundle.ai_review?.status === "unavailable" || bundle.ai_review?.status === "failed") && (
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div>Status: Unavailable</div>
-            </div>
-          )}
-
-          {bundle.ai_review?.status !== "pending" && (
-            <button
-              className="btn"
-              onClick={handleTriggerReview}
-              disabled={reviewing}
-            >
-              {reviewing ? "Processing..." : reviewActionLabel()}
-            </button>
-          )}
         </div>
 
         <div style={{ display: "flex", gap: "var(--spacing-xl)", marginBottom: "var(--spacing-lg)", color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
