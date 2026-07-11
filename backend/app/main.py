@@ -14,6 +14,7 @@ from app.api.routes.me import router as me_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.terms import router as terms_router
+from app.api.routes.validations import router as validations_router
 from app.auth.dependencies import require_platform_terms_accepted
 from app.auth.policy import PolicyError
 from app.auth.router import router as auth_router
@@ -114,6 +115,11 @@ app.include_router(
     dependencies=[Depends(require_platform_terms_accepted)],
 )
 app.include_router(terms_router, prefix="/api")
+app.include_router(
+    validations_router,
+    prefix="/api",
+    dependencies=[Depends(require_platform_terms_accepted)],
+)
 
 if settings.example_analysis_dir:
     examples_dir = Path(settings.example_analysis_dir)

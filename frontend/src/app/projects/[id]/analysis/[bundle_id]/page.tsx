@@ -26,6 +26,11 @@ import {
   updateProjectBundle,
   triggerAiReview,
   checkResourceTerms,
+  BundleValidationStatus,
+  createValidationRequest,
+  getBundleValidations,
+  getBundleValidationStatus,
+  ValidationRequest,
 } from "@/lib/api";
 import { formatBundleStatus, bundleStatusStyle } from "@/lib/status";
 import LogViewer from "@/components/LogViewer";
@@ -68,6 +73,78 @@ export default function AnalysisDetailPage() {
   const [editBuildStrategy, setEditBuildStrategy] = useState("institutional");
   const [editVersion, setEditVersion] = useState("");
   const [editDescription, setEditDescription] = useState("");
+
+  // Validation state
+  const [validations, setValidations] = useState<ValidationRequest[]>([]);
+  const [validationStatus, setValidationStatus] = useState<BundleValidationStatus | null>(null);
+  const [validationLoading, setValidationLoading] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Expanded validation log
+  const [expandedValidation, setExpandedValidation] = useState<string | null>(null);
+
+  const fetchValidationState = useCallback(async () => {
+    if (!bundleId) return;
+    try {
+      const [vList, status] = await Promise.all([
+        getBundleValidations(projectId, bundleId),
+        getBundleValidationStatus(projectId, bundleId),
+      ]);
+      setValidations(vList);
+      setValidationStatus(status);
+    } catch {
+      // Validation API may not be available in all deployments
+    }
+  }, [projectId, bundleId]);
+
+  useEffect(() => {
+    if (bundle?.status === "draft") {
+      fetchValidationState();
+    }
+  }, [bundle?.status, fetchValidationState]);
+
+  const handleRunValidation = async () => {
+    setValidationLoading(true);
+    setValidationError(null);
+    try {
+      // Save pending changes first — same pattern as handleSubmit
+      await updateProjectBundle(projectId, bundleId, {
+        name: editName,
+        execution_environment_id: editEnvId || undefined,
+        entrypoint: editEntrypoint || undefined,
+        interpreter: editInterpreter as any,
+        arguments: editArguments || undefined,
+        build_strategy: editBuildStrategy,
+        version: editVersion || undefined,
+        description: editDescription || undefined,
+        resource_identifiers: selectedResources.length > 0 ? selectedResources : undefined,
+      });
+    } catch {
+      setValidationError("Failed to save changes before validation");
+      setValidationLoading(false);
+      return;
+    }
+
+    try {
+      await createValidationRequest(projectId, bundleId, {
+        analysis_bundle_id: bundleId,
+      });
+      // Poll for completion
+      const poll = setInterval(async () => {
+        const vList = await getBundleValidations(projectId, bundleId);
+        setValidations(vList);
+        const latest = vList[0];
+        if (latest && (latest.status === "completed" || latest.status === "failed" || latest.status === "cancelled")) {
+          clearInterval(poll);
+          setValidationLoading(false);
+          await fetchValidationState();
+        }
+      }, 3000);
+    } catch (e) {
+      setValidationError(e instanceof Error ? e.message : "Failed to start validation");
+      setValidationLoading(false);
+    }
+  };
 
   const fetchBundle = useCallback(async () => {
     const b = await getProjectBundle(projectId, bundleId);
@@ -1311,6 +1388,132 @@ export default function AnalysisDetailPage() {
           </div>
         </div>
 
+        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-sm)" }}>
+            <h3
+              style={{
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "var(--color-text-secondary)",
+                margin: 0,
+              }}
+            >
+              Validation Run
+            </h3>
+            {validationStatus?.is_validated && (
+              <span style={{ fontSize: "0.8rem", color: "#2e7d32", fontWeight: 600 }}>
+                ✅ Validated
+              </span>
+            )}
+            {validationStatus?.has_changed && (
+              <span style={{ fontSize: "0.8rem", color: "#ed6c02", fontWeight: 600 }}>
+                ⚠️ Bundle has changed since validation
+              </span>
+            )}
+          </div>
+
+          <div style={{ marginBottom: "var(--spacing-md)" }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleRunValidation}
+              disabled={validationLoading || !editEnvId || bundleFiles.length === 0}
+            >
+              {validationLoading ? "Running..." : "Run Validation"}
+            </button>
+            {validationError && (
+              <div style={{ color: "#d32f2f", fontSize: "0.85rem", marginTop: "var(--spacing-xs)" }}>
+                {validationError}
+              </div>
+            )}
+            {(!editEnvId || bundleFiles.length === 0) && (
+              <div style={{ color: "var(--color-text-secondary)", fontSize: "0.8rem", marginTop: "var(--spacing-xs)" }}>
+                Configure an execution environment and upload files to enable validation.
+              </div>
+            )}
+          </div>
+
+          {validations.length > 0 && (
+            <div>
+              <table className="table" style={{ fontSize: "0.85rem" }}>
+                <thead>
+                  <tr>
+                    <th>Run</th>
+                    <th>Status</th>
+                    <th>Files</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {validations.slice(0, 5).map((v, i) => (
+                    <tr key={v.id}>
+                      <td style={{ fontWeight: 500 }}>#{validations.length - i}</td>
+                      <td>
+                        <span
+                          style={{
+                            color: v.status === "completed" ? "#2e7d32"
+                              : v.status === "failed" ? "#d32f2f"
+                              : v.status === "running" ? "#1565c0"
+                              : "var(--color-text-secondary)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {v.status}
+                        </span>
+                      </td>
+                      <td style={{ color: "var(--color-text-secondary)" }}>
+                        {v.output_files?.length ?? 0} file{(v.output_files?.length ?? 0) !== 1 ? "s" : ""}
+                      </td>
+                      <td>
+                        <button
+                          className="btn"
+                          style={{ fontSize: "0.75rem", padding: "1px 6px" }}
+                          onClick={() =>
+                            setExpandedValidation(
+                              expandedValidation === v.id ? null : v.id
+                            )
+                          }
+                        >
+                          {expandedValidation === v.id ? "Hide Log" : "View Log"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {expandedValidation && (
+            <div style={{ marginTop: "var(--spacing-sm)" }}>
+              {(() => {
+                const v = validations.find((r) => r.id === expandedValidation);
+                if (!v) return null;
+                return (
+                  <div>
+                    <LogViewer log={v.log} title={`Validation Log: ${v.name}`} maxHeight="300px" />
+                    {v.output_files && v.output_files.length > 0 && (
+                      <div style={{ marginTop: "var(--spacing-sm)" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600 }}>
+                          Output Files
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+                          {v.output_files.map((f) => (
+                            <div key={f.filename} style={{ fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
+                              {f.filename} — {f.size > 1024 ? `${(f.size / 1024).toFixed(1)} KB` : `${f.size} bytes`}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
         <div
           className="card"
           style={{
@@ -1333,6 +1536,21 @@ export default function AnalysisDetailPage() {
           </h3>
           <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
             To submit your analysis for institutional review, ensure the following are configured: analysis files, execution environment, entrypoint, and data resources. Save your draft to persist changes.
+            {validationStatus?.is_validated && (
+              <div style={{ marginTop: "var(--spacing-sm)", color: "#2e7d32" }}>
+                ✅ Your analysis has been validated against representative data and is ready for review.
+              </div>
+            )}
+            {validationStatus?.has_changed && (
+              <div style={{ marginTop: "var(--spacing-sm)", color: "#ed6c02" }}>
+                ⚠️ Your bundle has changed since the last validation. Run validation again to confirm your changes still work.
+              </div>
+            )}
+            {!validationStatus?.last_validation_id && (
+              <div style={{ marginTop: "var(--spacing-sm)", color: "var(--color-text-secondary)" }}>
+                Run validation first to confirm your analysis works against representative data before submitting for review.
+              </div>
+            )}
           </div>
         </div>
 

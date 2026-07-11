@@ -192,6 +192,37 @@ export interface OutputSetListItem {
   updated_at: string;
 }
 
+export interface ValidationRequest {
+  id: string;
+  project_id: string;
+  analysis_bundle_id: string;
+  name: string;
+  timeout_seconds: number;
+  parameter_overrides: Record<string, unknown>;
+  status: string;
+  log: string;
+  output_files: { filename: string; size: number }[];
+  bundle_content_hash: string;
+  requested_by_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ValidationRequestCreate {
+  analysis_bundle_id: string;
+  name?: string;
+  timeout_seconds?: number;
+  parameter_overrides?: Record<string, unknown>;
+}
+
+export interface BundleValidationStatus {
+  last_validation_id: string | null;
+  last_validation_hash: string;
+  current_bundle_hash: string;
+  is_validated: boolean;
+  has_changed: boolean;
+}
+
 export interface DashboardStats {
   projects: number;
   jobs: number;
@@ -598,6 +629,40 @@ export function getOutputSetDownloadUrl(
   requestId: string,
 ): string {
   return `/api/projects/${projectId}/execution-requests/${requestId}/outputs/download`;
+}
+
+// --- Validation Requests ---
+
+export async function createValidationRequest(
+  projectId: string,
+  bundleId: string,
+  data: ValidationRequestCreate,
+): Promise<ValidationRequest> {
+  return request<ValidationRequest>(
+    `/api/projects/${projectId}/bundles/${bundleId}/validations`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function getBundleValidations(
+  projectId: string,
+  bundleId: string,
+): Promise<ValidationRequest[]> {
+  return request<ValidationRequest[]>(
+    `/api/projects/${projectId}/bundles/${bundleId}/validations`,
+  );
+}
+
+export async function getBundleValidationStatus(
+  projectId: string,
+  bundleId: string,
+): Promise<BundleValidationStatus> {
+  return request<BundleValidationStatus>(
+    `/api/projects/${projectId}/bundles/${bundleId}/validation-status`,
+  );
 }
 
 export interface ArtefactList {

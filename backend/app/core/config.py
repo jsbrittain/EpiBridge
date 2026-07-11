@@ -46,12 +46,12 @@ class Settings(BaseSettings):
     bundle_store_dir: str = "/var/lib/epibridge/bundles"
     data_root: str = "/read-only-data"
     host_data_root: str = ""
+    host_resource_manifest_dir: str = ""
 
     ai_assist_enabled: bool = False
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.2"
 
-    build_context_dir: str = ""
     image_registry_prefix: str = "epibridge/builds"
 
     release_dir: str = "/var/lib/epibridge/releases"

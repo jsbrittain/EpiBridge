@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import shutil
@@ -47,6 +48,9 @@ class BundleStore(ABC):
 
     @abstractmethod
     def get_total_size(self, bundle_id: uuid.UUID) -> int: ...
+
+    @abstractmethod
+    def get_content_hash(self, bundle_id: uuid.UUID) -> str: ...
 
 
 class LocalFileSystemBundleStore(BundleStore):
@@ -172,6 +176,18 @@ class LocalFileSystemBundleStore(BundleStore):
 
     def get_total_size(self, bundle_id: uuid.UUID) -> int:
         return self._current_dir_size(self.get_path(bundle_id))
+
+    def get_content_hash(self, bundle_id: uuid.UUID) -> str:
+        store_path = self.get_path(bundle_id)
+        if not store_path.is_dir():
+            return ""
+        hasher = hashlib.sha256()
+        files = sorted(f for f in store_path.rglob("*") if f.is_file())
+        for fpath in files:
+            relative = str(fpath.relative_to(store_path))
+            hasher.update(relative.encode())
+            hasher.update(fpath.read_bytes())
+        return hasher.hexdigest()
 
     def _read_and_validate_zip(self, archive: UploadFile) -> zipfile.ZipFile:
         content = archive.file.read()
