@@ -553,13 +553,6 @@ export default function AnalysisDetailPage() {
                 {actionLoading === "Submit" ? "Submitting…" : "Submit for Review"}
               </button>
             )}
-            <Link
-              href={`/projects/${projectId}/analysis/${bundleId}/edit`}
-              className="btn"
-              style={{ textDecoration: "none" }}
-            >
-              Continue
-            </Link>
           </div>
           {error && (
             <div style={{ color: "#d32f2f", fontSize: "0.85rem", textAlign: "right" }}>
@@ -578,18 +571,73 @@ export default function AnalysisDetailPage() {
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               color: "var(--color-text-secondary)",
+              marginBottom: "var(--spacing-sm)",
+            }}
+          >
+            Overview
+          </h3>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+            {bundle.description
+              ? bundle.description
+              : "No description provided."}
+          </div>
+          <div style={{ display: "flex", gap: "var(--spacing-xl)", marginTop: "var(--spacing-md)", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
+            <div><span style={{ fontWeight: 600 }}>Version</span>: {bundle.version || "—"}</div>
+            <div><span style={{ fontWeight: 600 }}>Created</span>: {new Date(bundle.created_at).toLocaleDateString()}</div>
+          </div>
+        </div>
+
+        <div
+          className="card"
+          style={{
+            marginBottom: "var(--spacing-lg)",
+            border: bundle.source_path ? undefined : "1px dashed var(--color-border)",
+            background: bundle.source_path ? undefined : "var(--color-bg)",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--color-text-secondary)",
+              marginBottom: "var(--spacing-sm)",
+            }}
+          >
+            Files
+          </h3>
+          {bundle.source_path ? (
+            <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
+              Analysis code uploaded. File browsing will be available in a future update.
+            </div>
+          ) : (
+            <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+              No files uploaded yet. Upload a ZIP archive containing your analysis code to get started.
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
+          <h3
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--color-text-secondary)",
               marginBottom: "var(--spacing-md)",
               paddingBottom: "var(--spacing-sm)",
               borderBottom: "1px solid var(--color-border)",
             }}
           >
-            Configuration
+            Execution
           </h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-md)" }}>
             <div>
               <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Execution Environment
+                Environment
               </div>
               <div>{bundle.display_runtime}</div>
             </div>
@@ -613,7 +661,7 @@ export default function AnalysisDetailPage() {
               <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Entrypoint
               </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem" }}>{bundle.entrypoint || "Not configured"}</div>
             </div>
 
             <div>
@@ -621,13 +669,6 @@ export default function AnalysisDetailPage() {
                 Interpreter
               </div>
               <div>{bundle.interpreter === "python" ? "Python" : bundle.interpreter === "shell" ? "Shell" : bundle.interpreter === "r" ? "R" : bundle.interpreter}</div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Version
-              </div>
-              <div>{bundle.version}</div>
             </div>
 
             {bundle.arguments && (
@@ -640,15 +681,6 @@ export default function AnalysisDetailPage() {
             )}
           </div>
 
-          {bundle.description && (
-            <div style={{ marginTop: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Description
-              </div>
-              <div style={{ lineHeight: 1.6 }}>{bundle.description}</div>
-            </div>
-          )}
-
           <div style={{ marginTop: "var(--spacing-md)" }}>
             <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Data Resources
@@ -660,33 +692,10 @@ export default function AnalysisDetailPage() {
                 ))}
               </ul>
             ) : (
-              <div style={{ color: "var(--color-text-secondary)" }}>None selected</div>
+              <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
+                No data resources selected. Attach resources from the project Resources tab before submission.
+              </div>
             )}
-          </div>
-        </div>
-
-        <div
-          className="card"
-          style={{
-            marginBottom: "var(--spacing-lg)",
-            border: "1px dashed var(--color-border)",
-            background: "var(--color-bg)",
-          }}
-        >
-          <h3
-            style={{
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              color: "var(--color-text-secondary)",
-              marginBottom: "var(--spacing-sm)",
-            }}
-          >
-            Files
-          </h3>
-          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", fontStyle: "italic" }}>
-            File management will be available in a future update.
           </div>
         </div>
 
@@ -710,8 +719,8 @@ export default function AnalysisDetailPage() {
           >
             Readiness
           </h3>
-          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", fontStyle: "italic" }}>
-            Readiness checks will be available in a future update.
+          <div style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+            To submit your analysis for institutional review, ensure the following are configured: analysis files, execution environment, entrypoint, and data resources. Readiness checks will be available in a future update.
           </div>
         </div>
 

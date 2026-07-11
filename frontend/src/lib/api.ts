@@ -82,13 +82,14 @@ export interface AnalysisBundle {
   id: string;
   project_id: string;
   created_by_id: string;
-  execution_environment_id: string;
+  execution_environment_id: string | null;
   name: string;
   status: string;
   build_strategy: string;
   build_status: string;
   build_error: string;
   build_log: string;
+  source_path: string;
   runtime: string;
   display_runtime: string;
   version: string;
@@ -338,6 +339,16 @@ export async function releaseOutputSet(outputSetId: string): Promise<OutputSet> 
 
 export async function getAdminBundle(id: string): Promise<AnalysisBundle> {
   return request<AnalysisBundle>(`/api/admin/bundles/${id}`);
+}
+
+export async function createDraftBundle(
+  projectId: string,
+  name: string,
+): Promise<AnalysisBundle> {
+  return request<AnalysisBundle>(`/api/projects/${projectId}/bundles`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function createProjectBundle(

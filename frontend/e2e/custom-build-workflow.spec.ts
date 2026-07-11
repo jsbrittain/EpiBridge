@@ -72,7 +72,7 @@ test("Custom Build Workflow", async ({ page }) => {
 
   // 5. Navigate to Create Analysis
   await page.getByRole("link", { name: "Analysis" }).click();
-  await page.getByRole("link", { name: "New Draft Bundle" }).click();
+  await page.getByRole("button", { name: "New Draft Bundle" }).click();
 
   // 6. Fill the form
   await page.getByLabel("Name").fill(analysisName);
