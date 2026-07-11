@@ -100,6 +100,7 @@ export default function ProjectResourcesPage() {
           resourceName={termsResource.name}
           onAccept={handleTermsAccept}
           onCancel={handleTermsCancel}
+          requireAcceptance={false}
         />
       )}
 

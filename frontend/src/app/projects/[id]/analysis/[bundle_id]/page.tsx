@@ -145,12 +145,12 @@ export default function AnalysisDetailPage() {
           (r) => r.has_terms && !r.accepted,
         );
         if (unaccepted.length > 0) {
-          setTermsResourceId(unaccepted[0].resource_id);
+          setTermsResourceId(unaccepted[0].resource_id || "");
           setTermsResourceName(unaccepted[0].title || "");
           return;
         }
       } catch {
-        // If terms check unavailable, proceed to backend enforcement
+        // If terms check fails, proceed to backend enforcement
       }
     }
     performAction("Submit", () => submitBundle(projectId, bundleId));
@@ -159,7 +159,7 @@ export default function AnalysisDetailPage() {
   const handleTermsAccept = () => {
     setTermsResourceId(null);
     setTermsResourceName("");
-    performAction("Submit", () => submitBundle(projectId, bundleId));
+    handleSubmit();
   };
 
   const handleTermsCancel = () => {

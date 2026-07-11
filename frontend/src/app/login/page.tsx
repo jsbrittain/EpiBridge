@@ -14,7 +14,11 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (user) {
-    router.push("/");
+    if (user.needs_platform_terms_acceptance) {
+      router.replace("/terms");
+    } else {
+      router.replace("/");
+    }
     return null;
   }
 
@@ -25,7 +29,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       await refresh();
-      router.push("/");
+      // AuthGate handles post-authentication routing.
     } catch {
       setError("Invalid email or password");
       setSubmitting(false);

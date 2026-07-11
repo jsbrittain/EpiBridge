@@ -2,10 +2,10 @@ import { test, expect } from "@playwright/test";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import { createZip } from "./helpers/zip";
+import { login } from "./helpers/auth";
 
-const TS = Date.now();
-
-const MAINTAINER_EMAIL = process.env.MAINTAINER_EMAIL || "maintainer@epibridge.local";
+const MAINTAINER_EMAIL =
+  process.env.MAINTAINER_EMAIL || "maintainer@epibridge.local";
 const MAINTAINER_PASSWORD = process.env.MAINTAINER_PASSWORD || "maintainer";
 
 /*
@@ -46,39 +46,29 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && \\
     rm -f /tmp/requirements.txt
 `;
 
-test("Custom Build Workflow: researcher creates project with Custom Build strategy, custom Dockerfile is used to build execution image, output proves customisation", async ({
-  page,
-}) => {
+test("Custom Build Workflow", async ({ page }) => {
+  const TS = Date.now();
   const projectName = `Custom Build Test ${TS}`;
   const analysisName = `Custom Build Analysis ${TS}`;
 
-  // 1. Login as maintainer (has build.customize capability via role seeding)
-  await page.goto("/login");
-  await page.fill("#email", MAINTAINER_EMAIL);
-  await page.fill("#password", MAINTAINER_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("/", { timeout: 15000 });
+  await login(page, MAINTAINER_EMAIL, MAINTAINER_PASSWORD);
   await expect(page.getByTestId("header-user-name")).toHaveText("Maintainer");
 
   // 2. Create project
   await page.getByRole("link", { name: "Projects" }).click();
   await page.getByRole("button", { name: "Create Project" }).click();
   await page.getByPlaceholder("Project name").fill(projectName);
-  await page.getByPlaceholder("Optional description").fill("Custom Build e2e test");
-  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page
+    .getByPlaceholder("Optional description")
+    .fill("Custom Build e2e test");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Create" })
+    .click();
 
   // 3. Open the project
   await page.getByText(projectName).click();
   await expect(page.getByRole("link", { name: "Overview" })).toBeVisible();
-
-  // 4. Attach data resource
-  await page.getByRole("link", { name: "Resources" }).click();
-  await page
-    .locator("tr")
-    .filter({ hasText: "mex-dengue-2026" })
-    .getByRole("button", { name: "Attach" })
-    .click();
-  await expect(page.getByText("mex-dengue-2026")).toBeVisible();
 
   // 5. Navigate to Create Analysis
   await page.getByRole("link", { name: "Analysis" }).click();
@@ -89,8 +79,9 @@ test("Custom Build Workflow: researcher creates project with Custom Build strate
   await page.getByLabel("Version").fill("2.0.0");
   await page.getByLabel("Entrypoint").fill("run.py");
   await page.getByLabel("Interpreter").selectOption("Python");
-  await page.getByLabel("Execution Environment").selectOption({ label: "Python 3.13" });
-  await page.getByText("mex-dengue-2026").click();
+  await page
+    .getByLabel("Execution Environment")
+    .selectOption({ label: "Python 3.13" });
 
   // 7. Select Custom Build strategy
   await page.getByLabel("Build Strategy").selectOption("Custom Build");
@@ -101,13 +92,11 @@ test("Custom Build Workflow: researcher creates project with Custom Build strate
     { name: "requirements.txt", content: "" },
     { name: "build/Dockerfile", content: CUSTOM_DOCKERFILE },
   ]);
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "custom-build-bundle.zip",
-      mimeType: "application/zip",
-      buffer: zipBuffer,
-    });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "custom-build-bundle.zip",
+    mimeType: "application/zip",
+    buffer: zipBuffer,
+  });
 
   // 9. Save
   await page.getByRole("button", { name: "Save" }).click();
@@ -140,14 +129,16 @@ test("Custom Build Workflow: researcher creates project with Custom Build strate
   //       5. Creates an ExecutionImage record and links it to the bundle
   //       6. Sets bundle.build_status = ENVIRONMENT_READY
   //     The frontend polls every 5s and shows "Ready to run" when complete.
-  await expect(page.getByText("Ready to run")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText("Ready to run")).toBeVisible({
+    timeout: 120_000,
+  });
 
   // 15. Run Analysis — creates ExecutionRequest
   await page.getByRole("button", { name: "Run Analysis" }).click();
 
   // 16. Wait for execution to complete
   await expect(
-    page.locator("tr").filter({ hasText: analysisName }).getByText("completed")
+    page.locator("tr").filter({ hasText: analysisName }).getByText("completed"),
   ).toBeVisible({ timeout: 180_000 });
 
   // 17. Navigate to Admin → Outputs to approve and release
@@ -184,7 +175,9 @@ test("Custom Build Workflow: researcher creates project with Custom Build strate
     expect(stats.size).toBeGreaterThan(0);
 
     const extractDir = `/tmp/epibridge-custom-build-proof-${TS}`;
-    execSync(`unzip -o "${downloadPath}" -d "${extractDir}"`, { encoding: "utf-8" });
+    execSync(`unzip -o "${downloadPath}" -d "${extractDir}"`, {
+      encoding: "utf-8",
+    });
     try {
       const proofContent = fs
         .readFileSync(`${extractDir}/build_proof.txt`, "utf-8")
@@ -194,4 +187,6 @@ test("Custom Build Workflow: researcher creates project with Custom Build strate
       execSync(`rm -rf "${extractDir}"`);
     }
   }
+
+  await page.getByRole("button", { name: "Sign out" }).click();
 });

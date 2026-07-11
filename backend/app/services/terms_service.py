@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.audit_event import AuditEventType
@@ -213,4 +214,108 @@ def get_acceptance_status(db: Session, user_id: uuid.UUID) -> dict:
             "accepted": platform_accepted,
         },
         "dataset_terms": dataset_terms,
+    }
+
+
+def get_acceptance_counts(
+    db: Session,
+) -> dict[uuid.UUID, int]:
+    rows = (
+        db.query(
+            TermsAcceptance.terms_of_service_id,
+            func.count(TermsAcceptance.id),
+        )
+        .group_by(TermsAcceptance.terms_of_service_id)
+        .all()
+    )
+    return {row[0]: row[1] for row in rows}
+
+
+DEFAULT_PLATFORM_TERMS_VERSION = "1.0.0"
+DEFAULT_PLATFORM_TERMS_TITLE = "EpiBridge Platform Terms of Service"
+DEFAULT_PLATFORM_TERMS_CONTENT = """\
+# EpiBridge Terms of Service
+
+## Acceptance of Terms
+
+By using the EpiBridge platform, you agree to these terms of service.
+
+## Researcher Responsibilities
+
+- All analysis must be conducted in accordance with institutional policies.
+- Data resources provided through the platform must not be redistributed.
+- Analysis outputs must be reviewed before release outside the platform.
+
+## Data Governance
+
+- Data resources are provided as-is for authorised research purposes only.
+- Direct access to source datasets is not permitted.
+- All analysis executes within isolated environments.
+
+## Limitation of Liability
+
+The platform is provided as a research tool. No warranty is expressed or implied.
+"""
+
+DEFAULT_RESOURCE_TERMS_VERSION = "1.0.0"
+DEFAULT_RESOURCE_TERMS_TITLE = "Mexico Dengue Surveillance Data — Terms of Use"
+DEFAULT_RESOURCE_TERMS_CONTENT = """\
+# Mexico Dengue Surveillance Data — Terms of Use
+
+## Purpose
+
+This dataset is provided for authorised research purposes only.
+
+## Restrictions
+
+- Data must not be redistributed.
+- All analysis outputs must be reviewed before external release.
+- Direct access to source data files is not permitted.
+
+## Attribution
+
+Any publications arising from this data must acknowledge the source.
+"""
+
+
+def seed_terms(db: Session) -> dict:
+    admin = db.query(User).filter(User.email == "admin@epibridge.local").first()
+    if admin is None:
+        return {
+            "status": "error",
+            "message": "Admin user not found. Run seed-admin first.",
+        }
+
+    existing = get_current_platform_terms(db)
+    if existing is not None:
+        return {"status": "skipped", "message": "Platform terms already exist."}
+
+    publish_platform_terms(
+        db,
+        published_by=admin,
+        title=DEFAULT_PLATFORM_TERMS_TITLE,
+        content=DEFAULT_PLATFORM_TERMS_CONTENT,
+        version=DEFAULT_PLATFORM_TERMS_VERSION,
+    )
+
+    resource = (
+        db.query(DataResource)
+        .filter(DataResource.identifier == "mex-dengue-2026")
+        .first()
+    )
+    if resource is not None:
+        existing_resource_terms = get_current_resource_terms(db, resource.id)
+        if existing_resource_terms is None:
+            publish_resource_terms(
+                db,
+                published_by=admin,
+                data_resource_id=resource.id,
+                title=DEFAULT_RESOURCE_TERMS_TITLE,
+                content=DEFAULT_RESOURCE_TERMS_CONTENT,
+                version=DEFAULT_RESOURCE_TERMS_VERSION,
+            )
+
+    return {
+        "status": "created",
+        "version": DEFAULT_PLATFORM_TERMS_VERSION,
     }

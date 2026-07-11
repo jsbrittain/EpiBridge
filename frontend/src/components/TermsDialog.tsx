@@ -10,9 +10,16 @@ interface TermsDialogProps {
   resourceName: string;
   onAccept: () => void;
   onCancel: () => void;
+  requireAcceptance?: boolean;
 }
 
-export function TermsDialog({ resourceId, resourceName, onAccept, onCancel }: TermsDialogProps) {
+export function TermsDialog({
+  resourceId,
+  resourceName,
+  onAccept,
+  onCancel,
+  requireAcceptance = true,
+}: TermsDialogProps) {
   const [terms, setTerms] = useState<TermsOfService | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +33,10 @@ export function TermsDialog({ resourceId, resourceName, onAccept, onCancel }: Te
   }, [resourceId]);
 
   const handleAccept = async () => {
+    if (!requireAcceptance) {
+      onAccept();
+      return;
+    }
     setAccepting(true);
     try {
       await acceptResourceTerms(resourceId);
@@ -35,6 +46,9 @@ export function TermsDialog({ resourceId, resourceName, onAccept, onCancel }: Te
       setAccepting(false);
     }
   };
+
+  const buttonLabel = requireAcceptance ? "Accept & Continue" : "Acknowledge & Continue";
+  const busyLabel = requireAcceptance ? "Accepting..." : "Continue";
 
   return (
     <div
@@ -60,11 +74,33 @@ export function TermsDialog({ resourceId, resourceName, onAccept, onCancel }: Te
         }}
       >
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
-          Dataset Terms — {resourceName}
+          {resourceName} — Terms of Service
         </h2>
-        <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-md)" }}>
-          Please review and accept the terms before using this data resource.
-        </p>
+
+        {terms && (
+          <div style={{ marginBottom: "var(--spacing-sm)", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
+            <div style={{ fontWeight: 600 }}>{terms.title}</div>
+            <div>
+              Version {terms.version}
+              {terms.published_at && (
+                <span> — Published {new Date(terms.published_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!requireAcceptance && (
+          <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-md)" }}>
+            This data resource is governed by published Terms of Service. Researchers must
+            acknowledge these terms before submitting analyses using this resource.
+          </p>
+        )}
+
+        {requireAcceptance && (
+          <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-md)" }}>
+            Please review and accept the terms before using this data resource.
+          </p>
+        )}
 
         {error && (
           <div style={{ color: "#d32f2f", marginBottom: "var(--spacing-md)", fontSize: "0.9rem" }}>
@@ -103,7 +139,7 @@ export function TermsDialog({ resourceId, resourceName, onAccept, onCancel }: Te
             onClick={handleAccept}
             disabled={accepting || !terms}
           >
-            {accepting ? "Accepting..." : "Accept & Continue"}
+            {accepting ? busyLabel : buttonLabel}
           </button>
         </div>
       </div>

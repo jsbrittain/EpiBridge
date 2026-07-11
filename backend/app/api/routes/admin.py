@@ -41,6 +41,7 @@ from app.services.output_set_service import (
     list_outputs_by_set,
 )
 from app.services.terms_service import (
+    get_acceptance_counts,
     get_current_platform_terms,
     publish_platform_terms,
     publish_resource_terms,
@@ -843,12 +844,69 @@ def get_admin_terms_status(
     current_user: User = Depends(get_current_user),
 ):
     _require_capability(current_user, Capability.TERMS_MANAGE)
-    platform = get_current_platform_terms(db)
+    from app.models.terms_of_service import TermsOfService
+
+    counts = get_acceptance_counts(db)
+    current_platform = get_current_platform_terms(db)
+
+    all_platform_terms = (
+        db.query(TermsOfService)
+        .filter(TermsOfService.terms_type == "platform")
+        .order_by(TermsOfService.published_at.desc())
+        .all()
+    )
+
+    def _version_entry(terms):
+        return {
+            "id": str(terms.id),
+            "version": terms.version,
+            "title": terms.title,
+            "published_at": terms.published_at.isoformat()
+            if terms.published_at
+            else None,
+            "acceptance_count": counts.get(terms.id, 0),
+        }
+
+    platform_history = [_version_entry(t) for t in all_platform_terms]
+
+    resource_ids = [
+        row[0]
+        for row in db.query(TermsOfService.data_resource_id)
+        .filter(
+            TermsOfService.terms_type == "data_resource",
+            TermsOfService.data_resource_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    ]
+
+    resource_terms_list = []
+    for rid in resource_ids:
+        resource = db.query(DataResource).filter(DataResource.id == rid).first()
+        all_resource_terms = (
+            db.query(TermsOfService)
+            .filter(
+                TermsOfService.terms_type == "data_resource",
+                TermsOfService.data_resource_id == rid,
+            )
+            .order_by(TermsOfService.published_at.desc())
+            .all()
+        )
+        resource_terms_list.append(
+            {
+                "resource_id": str(rid),
+                "resource_name": resource.name if resource else "Unknown",
+                "current": _version_entry(all_resource_terms[0])
+                if all_resource_terms
+                else None,
+                "history": [_version_entry(t) for t in all_resource_terms],
+            }
+        )
+
     return {
         "platform": {
-            "has_terms": platform is not None,
-            "version": platform.version if platform else None,
-            "title": platform.title if platform else None,
-            "published_at": platform.published_at if platform else None,
+            "current": _version_entry(current_platform) if current_platform else None,
+            "history": platform_history,
         },
+        "resource_terms": resource_terms_list,
     }

@@ -661,12 +661,42 @@ export async function publishResourceTerms(resourceId: string, data: { version: 
   });
 }
 
-export async function getAdminTermsStatus(): Promise<{ platform: { has_terms: boolean; version: string | null; title: string | null; published_at: string | null } }> {
-  return request("/api/admin/terms/status");
+export interface TermsVersionEntry {
+  id: string;
+  version: string;
+  title: string;
+  published_at: string | null;
+  acceptance_count: number;
 }
 
-export async function checkResourceTerms(resourceIds: string[]): Promise<{
-  results: { resource_id: string; has_terms: boolean; version?: string; title?: string; accepted?: boolean }[];
+export interface AdminTermsStatus {
+  platform: {
+    current: TermsVersionEntry | null;
+    history: TermsVersionEntry[];
+  };
+  resource_terms: {
+    resource_id: string;
+    resource_name: string;
+    current: TermsVersionEntry | null;
+    history: TermsVersionEntry[];
+  }[];
+}
+
+export async function getAdminTermsStatus(): Promise<AdminTermsStatus> {
+  return request<AdminTermsStatus>("/api/admin/terms/status");
+}
+
+export interface CheckResourceTermsResult {
+  resource_identifier: string;
+  resource_id?: string;
+  has_terms: boolean;
+  version?: string;
+  title?: string;
+  accepted?: boolean;
+}
+
+export async function checkResourceTerms(resourceIdentifiers: string[]): Promise<{
+  results: CheckResourceTermsResult[];
 }> {
-  return request(`/api/terms/check?resource_ids=${resourceIds.join(",")}`);
+  return request(`/api/terms/check?resource_ids=${resourceIdentifiers.join(",")}`);
 }

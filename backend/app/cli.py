@@ -3,6 +3,7 @@ import sys
 from app.db.session import SessionLocal
 from app.models.user import UserRole
 from app.services.demo_seeder import seed_demo_workspace
+from app.services.terms_service import seed_terms
 from app.services.user_service import (
     create_user,
     get_or_create_admin,
@@ -17,6 +18,24 @@ def seed_admin():
         print(f"seed-admin: Created/verified admin user: {user.email} (id={user.id})")
     except Exception as e:
         print(f"seed-admin: ERROR — {e}")
+        sys.exit(1)
+    finally:
+        db.close()
+
+
+def seed_terms_cmd():
+    db = SessionLocal()
+    try:
+        result = seed_terms(db)
+        if result["status"] == "skipped":
+            print(f"seed-terms: {result['message']}")
+        elif result["status"] == "error":
+            print(f"seed-terms: ERROR — {result['message']}")
+            sys.exit(1)
+        else:
+            print(f"seed-terms: Published platform terms (version={result['version']})")
+    except Exception as e:
+        print(f"seed-terms: ERROR — {e}")
         sys.exit(1)
     finally:
         db.close()
@@ -97,6 +116,31 @@ def seed_maintainer():
         db.close()
 
 
+def seed_researcher():
+    email = "researcher@epibridge.local"
+    password = "researcher"
+    display_name = "Researcher"
+
+    db = SessionLocal()
+    try:
+        user = get_or_create_user(
+            db,
+            email=email,
+            display_name=display_name,
+            password=password,
+            role=UserRole.RESEARCHER,
+        )
+        print(
+            f"seed-researcher: Created/verified researcher user: "
+            f"{user.email} (id={user.id})"
+        )
+    except Exception as e:
+        print(f"seed-researcher: ERROR — {e}")
+        sys.exit(1)
+    finally:
+        db.close()
+
+
 def seed_demo():
     db = SessionLocal()
     try:
@@ -122,7 +166,10 @@ def seed_demo():
 def main():
     if len(sys.argv) < 2:
         print("Usage: epibridge <command>")
-        print("Commands: seed-admin, seed-demo, create-user")
+        print(
+            "Commands: seed-admin, seed-maintainer, seed-researcher, "
+            "seed-terms, seed-demo, create-user"
+        )
         sys.exit(1)
 
     command = sys.argv[1]
@@ -130,6 +177,10 @@ def main():
         seed_admin()
     elif command == "seed-maintainer":
         seed_maintainer()
+    elif command == "seed-researcher":
+        seed_researcher()
+    elif command == "seed-terms":
+        seed_terms_cmd()
     elif command == "seed-demo":
         seed_demo()
     elif command == "create-user":

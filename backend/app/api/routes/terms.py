@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
+from app.models.data_resource import DataResource
 from app.models.user import User
 from app.schemas.terms import TermsOfServiceRead
 from app.services import terms_service
@@ -55,21 +56,39 @@ def get_terms_status(
 
 @router.get("/terms/check")
 def check_resource_terms(
-    resource_ids: str = Query(description="Comma-separated list of resource UUIDs"),
+    resource_ids: str = Query(
+        description="Comma-separated list of resource identifiers"
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ids = [uuid.UUID(id_str.strip()) for id_str in resource_ids.split(",")]
+    identifiers = [id_str.strip() for id_str in resource_ids.split(",")]
+    resources = (
+        db.query(DataResource).filter(DataResource.identifier.in_(identifiers)).all()
+    )
+    resource_map = {r.identifier: r for r in resources}
+
     results = []
-    for rid in ids:
-        terms = terms_service.get_current_resource_terms(db, rid)
+    for identifier in identifiers:
+        resource = resource_map.get(identifier)
+        if resource is None:
+            results.append({"resource_identifier": identifier, "has_terms": False})
+            continue
+        terms = terms_service.get_current_resource_terms(db, resource.id)
         if terms is None:
-            results.append({"resource_id": str(rid), "has_terms": False})
+            results.append(
+                {
+                    "resource_identifier": identifier,
+                    "resource_id": str(resource.id),
+                    "has_terms": False,
+                }
+            )
         else:
             accepted = terms_service.has_accepted_latest(db, current_user.id, terms.id)
             results.append(
                 {
-                    "resource_id": str(rid),
+                    "resource_identifier": identifier,
+                    "resource_id": str(resource.id),
                     "has_terms": True,
                     "version": terms.version,
                     "title": terms.title,

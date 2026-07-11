@@ -10,6 +10,13 @@ from app.models.project import Project
 from app.models.project_data_resource import ProjectResourceAllocation
 from app.models.project_membership import ProjectMembership
 from app.models.user import User
+from app.services.terms_service import (
+    DEFAULT_PLATFORM_TERMS_CONTENT,
+    DEFAULT_PLATFORM_TERMS_TITLE,
+    DEFAULT_PLATFORM_TERMS_VERSION,
+    get_current_platform_terms,
+    publish_platform_terms,
+)
 from app.workflow.bundle import approve_bundle, submit_bundle
 
 DEMO_PROJECT_NAME = "Dengue Analysis Demo"
@@ -36,6 +43,16 @@ def seed_demo_workspace(db: Session) -> dict:
             "status": "skipped",
             "message": (f"Demo workspace already exists (project_id={existing.id})"),
         }
+
+    platform_terms = get_current_platform_terms(db)
+    if platform_terms is None:
+        publish_platform_terms(
+            db,
+            published_by=admin,
+            title=DEFAULT_PLATFORM_TERMS_TITLE,
+            content=DEFAULT_PLATFORM_TERMS_CONTENT,
+            version=DEFAULT_PLATFORM_TERMS_VERSION,
+        )
 
     project = Project(
         name=DEMO_PROJECT_NAME,

@@ -6,17 +6,81 @@ import {
   getAdminResources,
   publishPlatformTerms,
   publishResourceTerms,
-  getPlatformTermsCurrent,
 } from "@/lib/api";
-import type { DataResource } from "@/lib/api";
+import type {
+  AdminTermsStatus,
+  DataResource,
+  TermsVersionEntry,
+} from "@/lib/api";
+
+function VersionTable({
+  title,
+  currentId,
+  history,
+}: {
+  title: string;
+  currentId: string | null;
+  history: TermsVersionEntry[];
+}) {
+  if (history.length === 0) {
+    return (
+      <div className="empty-state" style={{ marginBottom: "var(--spacing-md)" }}>
+        None published.
+      </div>
+    );
+  }
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "var(--spacing-md)" }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>{title}</th>
+            <th>Version</th>
+            <th>Published</th>
+            <th>Acceptances</th>
+          </tr>
+        </thead>
+        <tbody>
+          {history.map((entry) => (
+            <tr key={entry.id}>
+              <td>
+                {entry.title}
+                {entry.id === currentId && (
+                  <span
+                    style={{
+                      marginLeft: "var(--spacing-sm)",
+                      display: "inline-block",
+                      padding: "1px 6px",
+                      borderRadius: "3px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      background: "#e3f2fd",
+                      color: "#1565c0",
+                    }}
+                  >
+                    current
+                  </span>
+                )}
+              </td>
+              <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
+                {entry.version}
+              </td>
+              <td style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
+                {entry.published_at
+                  ? new Date(entry.published_at).toLocaleDateString()
+                  : "—"}
+              </td>
+              <td style={{ textAlign: "center" }}>{entry.acceptance_count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function AdminTermsPage() {
-  const [platformStatus, setPlatformStatus] = useState<{
-    has_terms: boolean;
-    version: string | null;
-    title: string | null;
-    published_at: string | null;
-  } | null>(null);
+  const [status, setStatus] = useState<AdminTermsStatus | null>(null);
   const [resources, setResources] = useState<DataResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,18 +103,12 @@ export default function AdminTermsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [status, allResources] = await Promise.all([
+      const [s, allResources] = await Promise.all([
         getAdminTermsStatus(),
         getAdminResources(),
       ]);
-      setPlatformStatus(status.platform);
+      setStatus(s);
       setResources(allResources);
-      if (status.platform.has_terms) {
-        const current = await getPlatformTermsCurrent();
-        setPlatVersion("");
-        setPlatTitle("");
-        setPlatContent("");
-      }
     } catch {
       setError("Failed to load terms status.");
     } finally {
@@ -114,7 +172,7 @@ export default function AdminTermsPage() {
   return (
     <div>
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-lg)" }}>
-        Terms of Service Management
+        Terms of Service — Published Versions
       </h2>
 
       {error && (
@@ -134,26 +192,11 @@ export default function AdminTermsPage() {
           Platform Terms
         </h3>
 
-        {platformStatus?.has_terms ? (
-          <div style={{ marginBottom: "var(--spacing-md)", fontSize: "0.9rem" }}>
-            <div style={{ marginBottom: "var(--spacing-xs)" }}>
-              <strong>Current version:</strong> {platformStatus.version}
-            </div>
-            <div style={{ marginBottom: "var(--spacing-xs)" }}>
-              <strong>Title:</strong> {platformStatus.title}
-            </div>
-            <div>
-              <strong>Published:</strong>{" "}
-              {platformStatus.published_at
-                ? new Date(platformStatus.published_at).toLocaleDateString()
-                : "—"}
-            </div>
-          </div>
-        ) : (
-          <div className="empty-state" style={{ marginBottom: "var(--spacing-md)" }}>
-            No platform terms published yet.
-          </div>
-        )}
+        <VersionTable
+          title="Version"
+          currentId={status?.platform.current?.id ?? null}
+          history={status?.platform.history ?? []}
+        />
 
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-md)" }}>
           <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
@@ -195,64 +238,88 @@ export default function AdminTermsPage() {
       </div>
 
       {/* Resource Terms */}
-      <div className="card">
+      <div className="card" style={{ marginBottom: "var(--spacing-lg)" }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
           Data Resource Terms
         </h3>
 
-        {resources.length === 0 ? (
-          <div className="empty-state">No data resources available.</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-            <select
-              value={selectedResource}
-              onChange={(e) => setSelectedResource(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
-            >
-              <option value="">— Select data resource —</option>
-              {resources.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.identifier})
-                </option>
-              ))}
-            </select>
-
-            {selectedResource && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-                <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-                  <input
-                    placeholder="Version (e.g., 1.0.0)"
-                    value={resVersion}
-                    onChange={(e) => setResVersion(e.target.value)}
-                    style={{ flex: 1, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
-                  />
-                  <input
-                    placeholder="Title"
-                    value={resTitle}
-                    onChange={(e) => setResTitle(e.target.value)}
-                    style={{ flex: 2, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
-                  />
-                </div>
-                <textarea
-                  placeholder="Terms content (Markdown)"
-                  value={resContent}
-                  onChange={(e) => setResContent(e.target.value)}
-                  rows={6}
-                  style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem", fontFamily: "var(--font-mono)" }}
-                />
-                <div>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handlePublishResource}
-                    disabled={publishingRes || !resVersion || !resTitle || !resContent}
-                  >
-                    {publishingRes ? "Publishing..." : "Publish Resource Terms"}
-                  </button>
-                </div>
-              </div>
-            )}
+        {status && status.resource_terms.length === 0 ? (
+          <div className="empty-state" style={{ marginBottom: "var(--spacing-md)" }}>
+            No data resources have published terms.
           </div>
+        ) : (
+          status?.resource_terms.map((rt) => (
+            <div key={rt.resource_id} style={{ marginBottom: "var(--spacing-lg)" }}>
+              <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
+                {rt.resource_name}
+              </h4>
+              <VersionTable
+                title="Version"
+                currentId={rt.current?.id ?? null}
+                history={rt.history}
+              />
+            </div>
+          ))
         )}
+
+        <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-md)" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "var(--spacing-sm)" }}>
+            Publish New Version
+          </div>
+          {resources.length === 0 ? (
+            <div className="empty-state">No data resources available.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+              <select
+                value={selectedResource}
+                onChange={(e) => setSelectedResource(e.target.value)}
+                style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
+              >
+                <option value="">— Select data resource —</option>
+                {resources.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} ({r.identifier})
+                  </option>
+                ))}
+              </select>
+
+              {selectedResource && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+                  <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+                    <input
+                      placeholder="Version (e.g., 1.0.0)"
+                      value={resVersion}
+                      onChange={(e) => setResVersion(e.target.value)}
+                      style={{ flex: 1, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
+                    />
+                    <input
+                      placeholder="Title"
+                      value={resTitle}
+                      onChange={(e) => setResTitle(e.target.value)}
+                      style={{ flex: 2, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
+                    />
+                  </div>
+                  <textarea
+                    placeholder="Terms content (Markdown)"
+                    value={resContent}
+                    onChange={(e) => setResContent(e.target.value)}
+                    rows={6}
+                    style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: "0.9rem", fontFamily: "var(--font-mono)" }}
+                  />
+                  <div>
+                    <button
+                      className="btn btn-primary"
+                      onClick={handlePublishResource}
+                      disabled={publishingRes || !resVersion || !resTitle || !resContent}
+                    >
+                      {publishingRes ? "Publishing..." : "Publish Resource Terms"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

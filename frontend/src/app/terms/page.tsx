@@ -9,7 +9,7 @@ import type { TermsOfService } from "@/lib/api";
 
 export default function TermsPage() {
   const router = useRouter();
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, refresh } = useAuth();
   const [terms, setTerms] = useState<TermsOfService | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
@@ -33,7 +33,8 @@ export default function TermsPage() {
     setAccepting(true);
     try {
       await acceptPlatformTerms();
-      router.push("/");
+      await refresh();
+      router.replace("/");
     } catch {
       setFetchError("Failed to accept terms. Please try again.");
       setAccepting(false);
