@@ -236,6 +236,8 @@ Capability vocabulary:
 | `environment.manage` | Manage execution environments |
 | `data.manage` | Manage data resources |
 | `user.manage` | Manage user accounts |
+| `terms.manage` | Publish and manage terms of service |
+| `validation.run` | Run validation against representative datasets |
 | `build.customize` | Use Custom Build strategy for analysis bundles |
 
 The `capabilities` table is materialised from the enum during seeding (the enum is authoritative). `UserCapability` records are copied from role templates at user creation and become independent thereafter.
@@ -244,9 +246,9 @@ Role templates:
 
 | Role | Capabilities |
 |------|-------------|
-| researcher | `project.manage`, `bundle.create`, `bundle.submit`, `execution.run` |
+| researcher | `project.manage`, `bundle.create`, `bundle.submit`, `execution.run`, `validation.run` |
 | moderator | All researcher + `project.members.manage`, `project.resources.manage`, `bundle.review`, `output.review` |
-| maintainer | All moderator + `output.release`, `environment.manage`, `data.manage`, `build.customize` |
+| maintainer | All moderator + `output.release`, `environment.manage`, `data.manage`, `build.customize`, `validation.run` |
 | admin | All capabilities |
 
 ### Project Membership
@@ -297,12 +299,16 @@ Policy is entirely capability-based. Roles are never consulted by the policy lay
 
 EpiBridge makes a clear distinction between two categories of entities.
 
-### Institutional Infrastructure (curated by the institution)
+### Institutional Infrastructure — Publications (curated by the institution)
 
-- **Data Resources** — registered institutional data assets. The institution owns and manages the underlying data; EpiBridge provides the catalogue and access control.
-- **Execution Environments** — approved runtimes in which analyses execute. The institution curates the available environments and their contents.
+The institution publishes authoritative guidance and infrastructure through **repository-backed publications**:
 
-These are seeded from YAML manifests on startup. The manifest is the source of truth; the database is a runtime index. Researchers do not create or modify institutional infrastructure during normal workflows.
+- **Data Resources** — registered institutional data assets. The institution owns and manages the underlying data; EpiBridge provides the catalogue and access control. Each publication includes schemas, documentation, and representative datasets.
+- **Execution Environments** — approved runtimes in which analyses execute. The institution curates the available environments and their contents, publishing base images, Dockerfiles, and local development guidance.
+- **Example Analyses** — demonstration bundles showing how to structure analyses against specific resources.
+- **Bundle Templates** — reusable bundle structures that researchers can download and adapt.
+
+These are published from YAML manifests on startup. The filesystem is the source of truth; the database is a runtime index. Researchers do not create or modify institutional infrastructure during normal workflows.
 
 ### Researcher Artefacts (created by researchers)
 
@@ -319,6 +325,101 @@ Researchers work exclusively with researcher artefacts. They select from availab
 - **Auth framework** (capabilities, roles, role–capability mappings) is seeded by `auth_framework_seeder.seed_auth_framework()` on first use (idempotent).
 - **Demo workspace** (optional) can be created by `seed-demo` CLI command — a development tool, not application startup logic.
 - **Manifest directories** (`RESOURCE_MANIFEST_DIR`, `ENVIRONMENT_MANIFEST_DIR`) are deployment configuration, not application defaults. Docker Compose sets them for development; production points them elsewhere.
+
+---
+
+## Institutional Publications
+
+The institution publishes authoritative guidance to researchers through **repository-backed publications**. These are read-only from the repository; the database indexes them for researcher discovery.
+
+### Publication Types
+
+| Publication | Location | Content |
+|-------------|----------|---------|
+| Execution Environments | `execution-environments/{identifier}/` | Base image Dockerfile, manifest, documentation |
+| Data Resources | `resources/{identifier}/` | Manifest, schemas, documentation, representative datasets |
+| Example Analyses | `examples/analyses/{identifier}/` | Demonstration bundle code, manifest, README |
+| Bundle Templates | `examples/templates/{identifier}/` | Reusable bundle structure, manifest |
+
+### Operational State vs. Institutional Knowledge
+
+> **Operational state** belongs in PostgreSQL.
+> **Institutional knowledge** belongs in the repository.
+
+Operational state (users, projects, bundles, execution requests, validation requests, output sets, sessions, audit events, terms acceptances) is created and managed through the application at runtime. The database is the authoritative store.
+
+Institutional knowledge (execution environment definitions, data resource publications, example analyses, bundle templates, schemas, documentation) is maintained in the repository and published to the database as a runtime index. The filesystem is the source of truth.
+
+The database is never the source of truth for institutional knowledge. If the repository and database diverge, the repository wins on the next startup reconciliation.
+
+### Publication Artefacts
+
+Each publication directory may contain:
+
+- `manifest.yaml` — registration metadata (identifier, name, description)
+- Artefact files (Dockerfiles, analysis code, schemas)
+- `README.md`, `DOCUMENTATION.md`, `SCHEMA.md` — researcher guidance
+- `representative/` — representative datasets for validation runs
+
+Publications are served to researchers through dedicated API endpoints (e.g., `/api/environments`, `/api/resources`, `/api/examples`, `/api/templates`) and are visible in the application UI.
+
+---
+
+## Researcher Lifecycle
+
+The completed researcher journey proceeds through the following stages:
+
+```
+Institutional Publications
+         │
+         ▼
+   Bundle Workspace
+         │
+         ▼
+   Validation Run  (advisory)
+         │
+         ▼
+   Submit for Review
+         │
+         ▼
+   Institutional Governance
+         │
+         ▼
+   Institutional Execution
+         │
+         ▼
+       Outputs
+```
+
+### Stage 1: Discovery
+
+Researchers browse institutional publications to understand what environments and data resources are available, review example analyses, and download bundle templates. All publication content is read-only and repository-backed.
+
+### Stage 2: Preparation
+
+Researchers create an Analysis Bundle within the Bundle Workspace. They select an execution environment, declare data resources, upload analysis code, and configure the entrypoint, interpreter, and arguments. The bundle remains in DRAFT status throughout preparation.
+
+### Stage 3: Validation (Advisory)
+
+Before submitting for review, researchers may run an operational validation. The bundle is executed against representative datasets only — governed data resources are never accessed. Validation outputs are transient and researcher-visible. Results include execution logs and output files. A "Validated" indicator confirms the bundle state at the time of validation. If the bundle changes after validation, the indicator warns "Bundle has changed since validation."
+
+Validation is never a submission gate. Researchers may always submit without validating.
+
+### Stage 4: Submission
+
+The researcher submits the bundle for institutional review. The bundle transitions from DRAFT to SUBMITTED status. No further edits are permitted.
+
+### Stage 5: Governance
+
+Institutional reviewers approve, reject, or supersede the bundle. If approved, the bundle transitions to APPROVED_FOR_EXECUTION and becomes eligible for institutional execution against governed data.
+
+### Stage 6: Execution
+
+Approved bundles are executed against governed data resources within isolated Docker containers. The worker processes execution requests sequentially.
+
+### Stage 7: Output Release
+
+Execution outputs undergo a two-stage approval process (output review then output release) before being made available to the researcher as a Release Package ZIP.
 
 ---
 
@@ -484,12 +585,26 @@ An **Analysis Bundle** is a researcher-created artefact that describes an analys
 
 - the analysis metadata (name, version, description)
 - a reference to an approved **Execution Environment** (selected from the curated catalogue)
-- the entry point script
+- the entry point script and interpreter
 - the Data Resources the analysis expects (declared by institutional identifier)
+- CLI arguments
 - the expected outputs
 - optional configuration parameters
+- an explicit **Build Strategy** (institutional or custom)
 
 The bundle is a **researcher artefact**, created within a Project and owned by the researcher who created it.
+
+### Bundle Workspace
+
+Researchers prepare Analysis Bundles in a **Bundle Workspace** — a mutable environment within the application where bundles are created, edited, and configured before submission. The workspace supports:
+
+- **File management**: upload ZIP archives, import files into existing bundles, upload individual files, delete files, clear all contents
+- **Execution configuration**: select environment, set entrypoint, interpreter, CLI arguments, version, build strategy
+- **Resource declaration**: select data resources allocated to the project
+- **AI Review**: generate an optional AI analysis summary (when enabled)
+- **Validation Run**: execute the bundle against representative datasets before submission
+
+The workspace is the single source of truth while the bundle is in DRAFT status. Changes are persisted via explicit save actions, and the workspace also saves pending changes automatically before submitting or validating.
 
 ### Bundle Model
 
@@ -498,14 +613,21 @@ AnalysisBundle
 ├── id                      (UUID, auto-generated)
 ├── project_id              (FK → Project)
 ├── created_by_id           (FK → User)
-├── execution_environment_id (FK → ExecutionEnvironment)
+├── execution_environment_id (FK → ExecutionEnvironment, nullable)
 ├── name
 ├── version
 ├── entrypoint
+├── interpreter             ("python" | "shell" | "r")
+├── arguments               (CLI arguments string)
 ├── description
+├── source_path             (bundle store path, set after upload)
 ├── outputs                 (JSON list of expected paths)
 ├── parameters              (JSON, reserved for future use)
+├── resource_identifiers    (declared via data_resources relationship)
 ├── build_strategy          ("institutional" | "custom")
+├── build_status            (environment_not_built | building | ready | failed)
+├── build_error             (error message if build failed)
+├── execution_image_id      (FK → ExecutionImage, set after successful build)
 ├── created_at
 └── updated_at
 ```
@@ -582,6 +704,90 @@ After a bundle is uploaded, an optional **AI review** may be generated asynchron
 - Reviews are **cached per bundle** and reused until explicitly refreshed.
 
 AI assistance is disabled by default (`AI_ASSIST_ENABLED=false`).
+
+---
+
+## Validation Run
+
+A **Validation Run** is an advisory operational check that executes an Analysis Bundle against representative datasets before submission. It verifies operational correctness — whether the analysis code executes successfully — not scientific correctness.
+
+### Architectural Principles
+
+- Validation uses the **same execution pipeline** as institutional execution (worker, Docker executor, image build, logging, timeout handling)
+- Validation mounts **representative datasets only** — governed data resources are never accessed
+- Representative datasets are **repository-backed publication artefacts**, located at `{RESOURCE_MANIFEST_DIR}/{resource_identifier}/representative/`
+- Representative data uses the **same directory structure and filenames** as governed data — analysis code does not change between validation and production
+- Validation outputs are **transient** — stored as metadata on the ValidationRequest, not as OutputSet records
+- Validation is **never a submission gate** — researchers may always submit without validating
+- Validation is **researcher-visible only** — outputs are not visible to other project members or administrators
+
+### ValidationRequest Model
+
+ValidationRequest is independent of ExecutionRequest, OutputSet, and governance:
+
+```
+ValidationRequest
+├── id                      (UUID, auto-generated)
+├── project_id              (FK → Project)
+├── analysis_bundle_id      (FK → AnalysisBundle)
+├── name                    (human-readable label)
+├── timeout_seconds         (default 3600, minimum 60)
+├── parameter_overrides     (JSON dict)
+├── status                  (enum: pending, running, completed, failed, cancelled)
+├── log                     (execution log text)
+├── output_files            (JSON list of {filename, size})
+├── bundle_content_hash     (execution fingerprint — SHA-256 of files + config)
+├── requested_by_id         (FK → User)
+├── created_at
+└── updated_at
+```
+
+### Bundle Consistency
+
+An **execution fingerprint** is computed at validation request creation time, covering everything that affects execution:
+
+- uploaded file contents
+- execution environment identifier
+- entrypoint
+- interpreter
+- arguments
+- resource identifiers (sorted deterministically)
+- build strategy
+
+The fingerprint is recomputed when checking bundle status. If the current fingerprint differs from the stored one, the bundle has changed since validation. The UI surfaces this as:
+
+| Condition | Display |
+|-----------|---------|
+| No validation run exists | *(no indicator)* |
+| Bundle matches last validation | ✅ **Validated** |
+| Bundle changed since validation | ⚠️ **Bundle has changed since validation** |
+
+### Execution Flow
+
+```
+Researcher clicks "Run Validation"
+         │
+         ▼
+Save pending bundle changes
+         │
+         ▼
+Create ValidationRequest (status: PENDING)
+         │
+         ▼
+Worker polls PENDING → RUNNING
+         │
+         ▼
+DockerExecutor launches container with representative data mounts
+         │
+         ▼
+Analysis executes against representative data
+         │
+         ▼
+Worker captures outputs (transient, no OutputSet)
+         │
+         ▼
+ValidationRequest → COMPLETED (or FAILED)
+```
 
 ---
 
@@ -785,12 +991,29 @@ Each analysis executes inside an isolated container with:
 
 ## Worker Architecture
 
-The **Worker** is a standalone service that polls for Pending Execution Requests and processes them sequentially.
+The **Worker** is a standalone service that polls for Pending requests and processes them sequentially in priority order: ValidationRequests first (fast feedback for researchers), then BuildRequests (image construction), then ExecutionRequests (institutional execution).
+
+### Polling
+
+```
+Worker Poll Loop
+  │
+  ├── 1. Poll: db → Pending ValidationRequest
+  │         process_validation(request)
+  │
+  ├── 2. Poll: db → Pending BuildRequest
+  │         process_build(request)
+  │
+  └── 3. Poll: db → Pending ExecutionRequest
+            execute_request(request)
+```
+
+### Institutional Execution
+
+For governed execution against production data resources:
 
 ```
 Worker
-  │
-  ├── Poll: db → Pending ExecutionRequest
   │
   ├── Resolve: bundle → analysis_dir, entrypoint, data_resources, env
   │
@@ -805,17 +1028,26 @@ Worker
   ├── Run with timeout
   │     ↓
   ├── Retrieve /output from container (get_archive)
-  │     strip output/ tar prefix, preserve subdirectories
   │     ↓
-  ├── Recursively walk extracted files
-  │     register each file by relative path
-  │     ↓
-  ├── Persist to shared Output Store
+  ├── Register OutputSet and Output records
   │     ↓
   ├── Transition to Completed
   │
   └── Failure: capture stderr → Failed
 ```
+
+### Validation Execution
+
+For validation runs against representative datasets, the worker follows the same execution pipeline but:
+
+- **Mounts representative data** from `{RESOURCE_MANIFEST_DIR}/{resource_identifier}/representative/` to `/data/{alias}/` instead of mounting governed data through the provider system
+- **Outputs are transient** — stored as file metadata on the ValidationRequest record, not as OutputSet records
+- **No governance** — no OutputSet, no review, no release package
+- **Audit events** are operational only (`validation.completed`, `validation.failed`)
+
+### Unified Mount Resolution
+
+The worker uses a single `resolve_mounts(bundle, db, representative=False)` function that parameterises source path resolution. When `representative=True`, it resolves from the resource manifest directory. When `representative=False`, it resolves through the provider system. Both mount at the same target path (`/data/{alias}`), ensuring the same analysis code works against both governed and representative data.
 
 ### Executor Abstraction
 
@@ -889,7 +1121,7 @@ The orchestration layer (in the worker) selects the Dockerfile:
 
 ```
 bundle.build_strategy == "custom"
-    → dockerfile = bundle_path / "build" / "Dockerfile"
+    → dockerfile = bundle_path / "Dockerfile"
 bundle.build_strategy == "institutional"
     → dockerfile = builder.get_template_dockerfile()
 ```
@@ -947,9 +1179,11 @@ The Build Strategy is recorded on the Analysis Bundle as explicit metadata (`bui
 
 ---
 
-## Canonical Governed Research Workflow
+## Researcher Workflows
 
-The canonical workflow demonstrates the complete governed lifecycle from a researcher's perspective:
+EpiBridge validates three distinct researcher workflows through Playwright e2e tests:
+
+### 1. Canonical Governed Research Workflow
 
 ```
 1.  User authenticates (login)
@@ -967,9 +1201,43 @@ The canonical workflow demonstrates the complete governed lifecycle from a resea
 13. Download Release Package (contains outputs + execution metadata)
 ```
 
-The canonical workflow is validated by the Playwright e2e test in `frontend/e2e/canonical-workflow.spec.ts`. It is a system test covering frontend, backend, database, worker, Docker executor, provider abstraction, runtime contract, output registration, and download endpoint.
+The canonical workflow is validated by `frontend/e2e/canonical-workflow.spec.ts`.
 
-An additional e2e test in `frontend/e2e/custom-build-workflow.spec.ts` validates the Custom Build path — from strategy selection through custom Dockerfile execution to output verification — proving that the custom image construction was genuinely used rather than merely checking UI state.
+### 2. Custom Environment Workflow
+
+```
+1.  User authenticates (maintainer)
+2.  Create a Project
+3.  Create a Draft Bundle with Custom Build strategy
+4.  Upload bundle ZIP containing a root-level Dockerfile
+5.  Submit for review
+6.  Approve the bundle
+7.  Request execution
+8.  Worker builds from the custom Dockerfile
+9.  Worker executes against governed data
+10. Verify the custom Dockerfile was genuinely used (provenance marker)
+```
+
+The custom build workflow is validated by `frontend/e2e/custom-build-workflow.spec.ts`.
+
+### 3. Validation Workflow
+
+```
+1.  User authenticates
+2.  Browse institutional publications (environments, resources)
+3.  Create a Project
+4.  Attach a Data Resource to the Project
+5.  Create a Draft Bundle
+6.  Upload analysis code that reads representative data
+7.  Run Validation (PENDING → RUNNING → COMPLETED)
+8.  View validation logs and output files
+9.  Verify "Validated" bundle consistency indicator
+10. Modify the bundle and verify "Bundle has changed since validation"
+11. Re-run validation to restore "Validated" state
+12. Submit for Review
+```
+
+The validation workflow is validated by `frontend/e2e/validation-workflow.spec.ts`. It proves that researchers can verify operational correctness against representative datasets before submitting for institutional governance.
 
 ---
 
@@ -1009,7 +1277,7 @@ Route-specific error handling takes precedence. The global handlers only fire wh
 
 ### Worker Resilience
 
-The worker runs as a single-threaded polling loop that processes `BuildRequest` and `ExecutionRequest` items in FIFO order. Three resilience mechanisms prevent the worker from crashing or leaking work:
+The worker runs as a single-threaded polling loop that processes `ValidationRequest`, `BuildRequest`, and `ExecutionRequest` items in priority order. Three resilience mechanisms prevent the worker from crashing or leaking work:
 
 1. **Database connection backoff**: If the database is unreachable, the worker retries with exponential backoff (1s, 2s, 4s, ..., max 60s). Backoff resets on successful connection.
 2. **Outer catch-all**: Any unexpected exception during a poll cycle is logged with a full traceback. The loop continues to the next cycle.
@@ -1040,6 +1308,10 @@ Identity validation (capability boundaries for each role) is maintained as separ
 15. **Build Strategy is explicit researcher metadata on the Analysis Bundle. The platform never infers build behaviour from bundle contents.**
 16. **The Execution Environment defines the institutional execution contract. Custom Build extends it; it does not create new execution environments.**
 17. **Capability enforcement happens at creation and submission, not during approval. The reviewer evaluates the immutable artefact, not the entitlement.**
+18. **Operational state belongs in PostgreSQL. Institutional knowledge belongs in the repository.**
+19. **Validation Run is advisory operational verification. It never replaces or bypasses institutional governance.**
+20. **Representative datasets are repository-backed publication artefacts. They are not DataResource records.**
+21. **Validation mounts the same paths as production execution. Analysis code does not change between validation and production.**
 
 ---
 
