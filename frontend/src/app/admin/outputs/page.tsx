@@ -53,9 +53,12 @@ export default function AdminOutputsPage() {
   const [outputAudit, setOutputAudit] = useState<Record<string, AuditEvent[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
+    setError(null);
     getAdminOutputSets()
       .then(setSets)
       .catch(() => setError("Failed to load output sets"))
@@ -63,6 +66,22 @@ export default function AdminOutputsPage() {
   };
 
   useEffect(load, []);
+
+  const handleAction = async (
+    outputSetId: string,
+    apiFn: (id: string) => Promise<unknown>,
+  ) => {
+    setActionError(null);
+    setActionLoading(true);
+    try {
+      await apiFn(outputSetId);
+      load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleExpand = async (id: string) => {
     if (expandedId === id) {
@@ -91,26 +110,26 @@ export default function AdminOutputsPage() {
     setExpandedId(id);
   };
 
-  const handleApprove = async (id: string) => {
-    await approveOutputSet(id);
-    load();
-  };
-
-  const handleReject = async (id: string) => {
-    await rejectOutputSet(id);
-    load();
-  };
-
-  const handleRelease = async (id: string) => {
-    await releaseOutputSet(id);
-    load();
-  };
-
   return (
     <>
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
         Execution Outputs
       </h2>
+
+      {actionError && (
+        <div
+          style={{
+            padding: "8px 12px",
+            marginBottom: "var(--spacing-md)",
+            background: "#f8d7da",
+            color: "#721c24",
+            borderRadius: "4px",
+            fontSize: "0.85rem",
+          }}
+        >
+          {actionError}
+        </div>
+      )}
 
       {loading ? (
         <div className="card empty-state">Loading...</div>
@@ -177,16 +196,18 @@ export default function AdminOutputsPage() {
                               <button
                                 className="btn btn-sm"
                                 style={{ background: "var(--color-success, #2e7d32)", color: "#fff", border: "none" }}
-                                onClick={() => handleApprove(s.id)}
+                                onClick={() => handleAction(s.id, approveOutputSet)}
+                                disabled={actionLoading}
                               >
-                                Approve
+                                {actionLoading ? "Processing…" : "Approve"}
                               </button>
                               <button
                                 className="btn btn-sm"
                                 style={{ background: "var(--color-danger, #c62828)", color: "#fff", border: "none" }}
-                                onClick={() => handleReject(s.id)}
+                                onClick={() => handleAction(s.id, rejectOutputSet)}
+                                disabled={actionLoading}
                               >
-                                Reject
+                                {actionLoading ? "Processing…" : "Reject"}
                               </button>
                             </>
                           )}
@@ -194,9 +215,10 @@ export default function AdminOutputsPage() {
                             <button
                               className="btn btn-sm"
                               style={{ background: "var(--color-primary, #1976d2)", color: "#fff", border: "none" }}
-                              onClick={() => handleRelease(s.id)}
+                              onClick={() => handleAction(s.id, releaseOutputSet)}
+                              disabled={actionLoading}
                             >
-                              Release
+                              {actionLoading ? "Processing…" : "Release"}
                             </button>
                           )}
                         </div>
