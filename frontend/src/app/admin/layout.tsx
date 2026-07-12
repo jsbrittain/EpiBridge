@@ -13,6 +13,7 @@ interface AdminTab {
 const adminTabs: AdminTab[] = [
   { href: "/admin", label: "Data Resources", requiredCapability: "data.manage" },
   { href: "/admin/bundles", label: "Submissions", requiredCapability: "bundle.review" },
+  { href: "/admin/executions", label: "Executions", requiredCapability: "bundle.review" },
   { href: "/admin/outputs", label: "Outputs", requiredCapability: "output.review" },
   { href: "/admin/terms", label: "Terms", requiredCapability: "terms.manage" },
   { href: "/admin/audit", label: "Audit Log", requiredCapability: "bundle.review" },
