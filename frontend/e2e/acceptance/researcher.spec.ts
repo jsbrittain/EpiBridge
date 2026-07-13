@@ -26,7 +26,7 @@ test("Researcher Acceptance", async ({ page }) => {
   await login(page, RESEARCHER_EMAIL, "researcher");
   await expect(page.getByTestId("header-user-name")).toBeVisible();
 
-  await page.getByRole("link", { name: "Projects" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
   await page.getByText(project.name).click();
   await expect(page.getByRole("link", { name: "Overview" })).toBeVisible();
 
