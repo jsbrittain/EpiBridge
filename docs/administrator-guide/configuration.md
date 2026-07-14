@@ -98,9 +98,17 @@ Logs are written to stderr in a structured format with UTC timestamps. Module lo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AI_ASSIST_ENABLED` | `false` | Enable AI-assisted analysis summaries. Requires Ollama service and a downloaded model. |
+| `AI_ASSIST_ENABLED` | `false` | Enable AI-assisted analysis summaries |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | URL of the Ollama API endpoint |
+| `OLLAMA_MODEL` | `llama3.2` | AI model to use for analysis summaries |
 
-See [AI Assistance](../architecture-and-reference/ai-assistance.md) for configuration details.
+The Ollama service runs behind a Docker Compose profile and must be started separately:
+
+```bash
+docker compose --profile ai up -d
+```
+
+See [AI Assistance](../architecture-and-reference/ai-assistance.md) for setup instructions and behaviour details.
 
 ### Manifest directories
 

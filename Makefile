@@ -182,7 +182,11 @@ else
 endif
 
 dev-ai:
+ifeq ($(EPIBRIDGE_TARGET),orbstack)
 	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && $(DOCKER_COMPOSE) --profile ai up -d'
+else
+	docker compose --profile ai up -d
+endif
 
 dev-up:
 	./scripts/orbstack.sh ssh 'cd $(VM_DIR) && docker compose up -d'

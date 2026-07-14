@@ -20,47 +20,60 @@ what an uploaded analysis appears to do before executing it.
 ## Status
 
 AI assistance is disabled by default (`AI_ASSIST_ENABLED=false`). The platform
-behaves identically to how it does today. No AI services are started, no models
-are downloaded, and no background tasks are created.
+behaves identically without it. No AI services are started, no models are
+downloaded, and no background tasks are created.
 
 ## How to enable
 
-### 1. Start the optional AI service
+### 1. Start the AI service
 
-The Ollama service runs behind a Docker Compose profile. Start it on an
-already-running stack:
+The Ollama service runs behind a Docker Compose profile. Start it alongside the
+existing stack:
+
+```bash
+docker compose --profile ai up -d
+```
+
+This is additive — no existing containers are rebuilt or reprovisioned.
+
+For development environments using the OrbStack VM:
 
 ```bash
 make dev-ai
 ```
 
-This is additive — no containers are rebuilt or reprovisioned. The existing
-bootstrap is completely unchanged.
-
 ### 2. Enable AI in configuration
 
-Inside the deployment VM, edit the `.env` file:
-
-```bash
-./scripts/orbstack.sh ssh 'vim /opt/epibridge/.env'
-```
-
-Set:
+Set the following in `.env`:
 
 ```
 AI_ASSIST_ENABLED=true
 ```
 
-Restart the backend to reload the configuration:
+Then recreate the backend container to load the new configuration (environment variables are read at container creation time):
 
 ```bash
-./scripts/orbstack.sh ssh 'cd /opt/epibridge && docker compose restart backend'
+docker compose up -d backend
 ```
+
+For OrbStack deployments:
+
+```bash
+./scripts/orbstack.sh ssh 'cd /opt/epibridge && docker compose up -d backend'
+```
+
+A browser page refresh may also be needed — the frontend caches the AI availability status from when the page was first loaded.
 
 ### 3. Install a model
 
 Model installation is an explicit administrator action. Models persist in a
 Docker volume and survive container restarts.
+
+```bash
+docker compose exec ollama ollama pull llama3.2
+```
+
+For OrbStack deployments:
 
 ```bash
 ./scripts/orbstack.sh ssh 'cd /opt/epibridge && docker compose exec ollama ollama pull llama3.2'
@@ -69,6 +82,16 @@ Docker volume and survive container restarts.
 Supported models include any model available in the
 [Ollama library](https://ollama.com/library). The model is configured via the
 `OLLAMA_MODEL` environment variable (default: `llama3.2`).
+
+## Configuration reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_ASSIST_ENABLED` | `false` | Enable AI-assisted analysis summaries |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | URL of the Ollama API endpoint |
+| `OLLAMA_MODEL` | `llama3.2` | AI model to use for analysis summaries |
+
+Set these in `.env` and recreate the backend container (`docker compose up -d backend`).
 
 ## Behaviour when AI is unavailable
 

@@ -61,3 +61,6 @@ certs/
 
 # Sphinx documentation build output
 docs/_build/
+
+# Stray build artefacts
+docs/docs.zip
