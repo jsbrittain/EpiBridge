@@ -445,6 +445,8 @@ Before submitting for review, researchers may run an operational validation. The
 
 Validation is never a submission gate. Researchers may always submit without validating.
 
+For task-oriented guidance on running validation, see the [Researcher Guide](../user-guides/researcher.md#validation).
+
 ### Stage 4: Submission
 
 The researcher submits the bundle for institutional review. The bundle transitions from DRAFT to SUBMITTED status. No further edits are permitted.
@@ -461,6 +463,8 @@ Approved bundles are executed against governed data resources within isolated Do
 
 Execution outputs undergo a two-stage approval process (output review then output release) before being made available to the researcher as a Release Package ZIP.
 
+For a task-oriented walkthrough of the researcher lifecycle, see the [Quick Start](../getting-started/quick-start.md) guide. For detailed researcher workflows, see the [Researcher Guide](../user-guides/researcher.md).
+
 ---
 
 ## Data Resources
@@ -468,6 +472,8 @@ Execution outputs undergo a two-stage approval process (output review then outpu
 EpiBridge does not own, store, or manage scientific data.
 
 A **Data Resource** represents an existing institutional data asset that has been registered for analysis. The institution owns and manages the underlying data; EpiBridge provides a catalogue of available resources, access control, and secure execution.
+
+For the runtime mount contract (where resources appear inside analysis containers), see the [Data Resources administrator guide](../administrator-guide/data-resources.md#runtime-access-contract).
 
 ### Resource Providers
 
@@ -524,6 +530,8 @@ Commit (atomic — all or nothing)
 ### Project Resource Allocation
 
 A **Project** represents permission to analyse one or more Data Resources. Projects do not own resources — the relationship is managed through `ProjectResourceAllocation`, a first-class domain object that records the institutional provisioning decision. Each allocation captures who authorised it (`created_by_id`), when it was created (`created_at`), and optionally when and by whom it was revoked (`revoked_by_id`, `revoked_at`). An allocation is active when `revoked_at IS NULL`.
+
+For operational guidance on managing data resources, see the [Data Resources](../administrator-guide/data-resources.md) administrator guide.
 
 ---
 
@@ -618,6 +626,8 @@ ExecutionEnvironment
 
 Execution Environments are seeded from YAML manifests on startup, following the same pattern as Data Resources. Registration is idempotent — the manifest directory is rescanned on each startup and new or updated environments are reconciled automatically.
 
+For operational guidance on managing execution environments, see the [Execution Environments](../administrator-guide/execution-environments.md) administrator guide.
+
 ---
 
 ## Projects
@@ -642,6 +652,8 @@ Projects are surfaced in the UI according to the user's responsibility within th
 The homepage presents role-based quick actions — a researcher sees "Create Project" and "View Bundles"; an administrator sees "Manage Users" and "Audit Log". The header displays the user's persona (derived from their role) for self-identification.
 
 This design prioritises institutional responsibility over implementation detail, making it clear what each user is expected to do on the platform.
+
+For task-oriented guidance on working with projects, see the [Researcher Guide](../user-guides/researcher.md#projects).
 
 ---
 
@@ -771,6 +783,8 @@ After a bundle is uploaded, an optional **AI review** may be generated asynchron
 
 AI assistance is disabled by default (`AI_ASSIST_ENABLED=false`).
 
+For task-oriented guidance on creating and managing bundles, see the [Researcher Guide](../user-guides/researcher.md#analysis-bundles). For configuration details, see [AI Assistance](ai-assistance.md).
+
 ---
 
 ## Validation Run
@@ -869,6 +883,8 @@ An **Execution Request** represents the intention to run an approved Analysis Bu
 | Execution Request | *When* to run — an intent to execute a specific bundle with specific parameters |
 
 A single Analysis Bundle may be used to create many Execution Requests.
+
+For task-oriented guidance on requesting execution, see the [Researcher Guide](../user-guides/researcher.md#execution).
 
 ### Request Model
 
@@ -998,6 +1014,8 @@ When an Output Set is **Released**, the platform creates a ZIP archive containin
 The Release Package is the sole delivery mechanism to researchers. Individual output files are never downloaded separately. Moderators retain the ability to inspect individual artefacts via the admin interface.
 
 The working artefacts on disk (produced by the executor) and the Release Package (the researcher-facing distribution) are kept distinct.
+
+For task-oriented guidance on output governance, see the [Researcher Guide](../user-guides/researcher.md#outputs) and [Moderator Guide](../user-guides/moderator.md#reviewing-output-sets).
 
 ### Storage
 
@@ -1368,6 +1386,8 @@ The platform sends responsibility-transfer email notifications to keep the right
 - `app/services/notification_triggers.py` — trigger functions called from route handlers
 - Requires no additional infrastructure beyond an SMTP relay
 
+For SMTP configuration details, see [Configuration](../administrator-guide/configuration.md#smtp-email-notifications).
+
 ---
 
 ## Operational Behaviour
@@ -1415,6 +1435,8 @@ The worker runs as a single-threaded polling loop that processes `ValidationRequ
 Items that fail during processing are transitioned to `FAILED` status in the database. They remain visible to operators through the admin API and are not silently retried.
 
 Identity validation (capability boundaries for each role) is maintained as separate integration tests.
+
+For operational guidance on configuration, logging, and health checks, see [Configuration](../administrator-guide/configuration.md) and [Backup & Recovery](../administrator-guide/backup-and-recovery.md).
 
 ---
 
