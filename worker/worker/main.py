@@ -33,8 +33,11 @@ from app.models.validation_request import (
 )
 from app.providers.registry import registry
 from app.providers.types import ProviderType
+from app.models.platform_setting import SettingKey
 from app.services.audit_service import create_audit_event
 from app.services.bundle_store import get_bundle_store
+from app.services.execution_request_service import create_execution_request
+from app.services.platform_settings_service import get_setting_bool
 from app.services.output_set_service import (
     ensure_output_set,
     register_output as register_set_output,
@@ -183,6 +186,29 @@ def resolve_mounts(
     return mounts
 
 
+def _auto_create_execution_request(
+    db: Session, build: BuildRequest, bundle: AnalysisBundle
+) -> None:
+    """Create an initial ExecutionRequest after a successful build when
+    auto-execution is enabled.
+
+    Automatic execution is not a separate execution model. It is simply an
+    automatic creation of the initial ExecutionRequest after a successful
+    build. Subsequent execution requests continue to use the existing manual
+    workflow unchanged.
+    """
+    if not get_setting_bool(
+        db, SettingKey.AUTO_EXECUTE_APPROVED_BUNDLES, default=True
+    ):
+        return
+    create_execution_request(
+        db,
+        data={"analysis_bundle_id": bundle.id},
+        project_id=bundle.project_id,
+        requested_by_id=WORKER_USER_ID,
+    )
+
+
 def process_build(db: Session, build: BuildRequest) -> None:
     # NOTE: bundle.build_status mirrors the BuildRequest lifecycle.
     # Environment preparation is owned by BuildRequest, not AnalysisBundle.
@@ -250,6 +276,12 @@ def process_build(db: Session, build: BuildRequest) -> None:
         bundle.execution_image_id = existing.id
         bundle.build_status = AnalysisBundleBuildStatus.ENVIRONMENT_READY
         build.execution_image_id = existing.id
+        try:
+            _auto_create_execution_request(db, build, bundle)
+        except ValueError:
+            logger.warning(
+                "Auto-execution: bundle %s no longer eligible for execution", bundle.id
+            )
         build_transition_to(db, build, BuildRequestStatus.COMPLETED, "cache hit (race)")
         return
 
@@ -333,6 +365,12 @@ def process_build(db: Session, build: BuildRequest) -> None:
     bundle.execution_image_id = cached.id
     bundle.build_status = AnalysisBundleBuildStatus.ENVIRONMENT_READY
     build.execution_image_id = cached.id
+    try:
+        _auto_create_execution_request(db, build, bundle)
+    except ValueError:
+        logger.warning(
+            "Auto-execution: bundle %s no longer eligible for execution", bundle.id
+        )
     build_transition_to(db, build, BuildRequestStatus.COMPLETED)
 
 

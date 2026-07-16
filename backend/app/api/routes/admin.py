@@ -558,10 +558,12 @@ def post_admin_approve_output_set(
         db, current_user, output_set.execution_request.project_id
     )
     _require_capability(current_user, Capability.OUTPUT_REVIEW)
+    output_bundle = output_set.execution_request.analysis_bundle
     if (
-        get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
+        output_bundle.submitted_by_id is not None
+        and get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
         and not current_user.has_capability(Capability.GOVERNANCE_SELF_REGULATE)
-        and current_user.id == output_set.execution_request.requested_by_id
+        and current_user.id == output_bundle.submitted_by_id
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -629,10 +631,12 @@ def post_admin_reject_output_set(
         db, current_user, output_set.execution_request.project_id
     )
     _require_capability(current_user, Capability.OUTPUT_REVIEW)
+    output_bundle = output_set.execution_request.analysis_bundle
     if (
-        get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
+        output_bundle.submitted_by_id is not None
+        and get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
         and not current_user.has_capability(Capability.GOVERNANCE_SELF_REGULATE)
-        and current_user.id == output_set.execution_request.requested_by_id
+        and current_user.id == output_bundle.submitted_by_id
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -701,10 +705,12 @@ def post_admin_release_output_set(
         db, current_user, output_set.execution_request.project_id
     )
     _require_capability(current_user, Capability.OUTPUT_RELEASE)
+    output_bundle = output_set.execution_request.analysis_bundle
     if (
-        get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
+        output_bundle.submitted_by_id is not None
+        and get_setting_bool(db, SettingKey.PREVENT_SELF_MODERATION, default=True)
         and not current_user.has_capability(Capability.GOVERNANCE_SELF_REGULATE)
-        and current_user.id == output_set.execution_request.requested_by_id
+        and current_user.id == output_bundle.submitted_by_id
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -71,6 +71,7 @@ export default function AdminSettingsPage() {
 
   const aiEnabled = settings?.["ai_review_enabled"] === "true";
   const moderationEnabled = settings?.["prevent_self_moderation"] !== "false";
+  const autoExecuteEnabled = settings?.["auto_execute_approved_bundles"] !== "false";
   const aiUnavailable = aiStatus !== null && !aiStatus.ready;
   const toggleDisabled = saving === "ai_review_enabled" || (aiUnavailable && !aiEnabled);
 
@@ -235,6 +236,53 @@ export default function AdminSettingsPage() {
             {saving === "prevent_self_moderation"
               ? "..."
               : moderationEnabled
+                ? "Enabled"
+                : "Disabled"}
+          </button>
+        </div>
+      </div>
+
+      <div className="card" style={{ maxWidth: "600px", marginTop: "var(--spacing-lg)" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: 0 }}>
+              Automatically execute approved analysis bundles
+            </h3>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--color-text-secondary)",
+                marginTop: "var(--spacing-xs)",
+                marginBottom: 0,
+              }}
+            >
+              When enabled, an execution request is automatically created when
+              the build completes after bundle approval. Researchers may still
+              manually create additional execution requests for the same bundle.
+            </p>
+          </div>
+          <button
+            className="btn"
+            onClick={() => handleToggle("auto_execute_approved_bundles", autoExecuteEnabled ? "true" : "false")}
+            disabled={saving === "auto_execute_approved_bundles"}
+            style={{
+              minWidth: "80px",
+              background: autoExecuteEnabled ? "#d4edda" : "#f0f0f0",
+              color: autoExecuteEnabled ? "#155724" : "#666",
+              border: autoExecuteEnabled ? "1px solid #c3e6cb" : "1px solid #ddd",
+              opacity: saving === "auto_execute_approved_bundles" ? 0.5 : 1,
+              cursor: saving === "auto_execute_approved_bundles" ? "not-allowed" : "pointer",
+            }}
+          >
+            {saving === "auto_execute_approved_bundles"
+              ? "..."
+              : autoExecuteEnabled
                 ? "Enabled"
                 : "Disabled"}
           </button>
