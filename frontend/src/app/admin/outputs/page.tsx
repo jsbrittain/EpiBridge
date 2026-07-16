@@ -13,6 +13,7 @@ import {
   releaseOutputSet,
   getAuditEvents,
 } from "@/lib/api";
+import { RejectDialog } from "@/components/RejectDialog";
 
 function eventLabel(eventType: string): string {
   const labels: Record<string, string> = {
@@ -57,6 +58,7 @@ export default function AdminOutputsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -123,6 +125,26 @@ export default function AdminOutputsPage() {
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>
         Execution Outputs
       </h2>
+
+      {rejectTarget && (
+        <RejectDialog
+          title="Output Set"
+          onConfirm={async (reason) => {
+            setActionError(null);
+            setActionLoading(true);
+            try {
+              await rejectOutputSet(rejectTarget, reason);
+              setRejectTarget(null);
+              load();
+            } catch (e) {
+              setActionError(e instanceof Error ? e.message : "Rejection failed");
+            } finally {
+              setActionLoading(false);
+            }
+          }}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
 
       {actionError && (
         <div
@@ -226,7 +248,7 @@ export default function AdminOutputsPage() {
                                   <button
                                     className="btn btn-sm"
                                     style={{ background: "var(--color-danger, #c62828)", color: "#fff", border: "none" }}
-                                    onClick={() => handleAction(s.id, rejectOutputSet)}
+                                    onClick={() => setRejectTarget(s.id)}
                                     disabled={actionLoading}
                                   >
                                     {actionLoading ? "Processing…" : "Reject"}
@@ -263,6 +285,12 @@ export default function AdminOutputsPage() {
                     {expandedId === s.id && (
                       <tr key={`${s.id}-detail`}>
                         <td colSpan={4} style={{ padding: "0 16px 8px 16px" }}>
+                          {s.rejection_reason && (
+                            <div style={{ fontSize: "0.85rem", marginBottom: "var(--spacing-sm)", padding: "8px 12px", background: "#f8d7da", borderRadius: "4px" }}>
+                              <strong style={{ display: "block", marginBottom: "4px" }}>Rejection reason:</strong>
+                              {s.rejection_reason}
+                            </div>
+                          )}
                           {expandedOutputs.length > 0 && (
                             <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "var(--spacing-sm)" }}>
                               <strong style={{ display: "block", marginBottom: "4px" }}>Artefacts:</strong>

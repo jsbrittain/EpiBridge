@@ -18,6 +18,7 @@ import {
 import { formatBundleStatus, bundleStatusStyle } from "@/lib/status";
 import LogViewer from "@/components/LogViewer";
 import { CodeBlock } from "@/components/CodeBlock";
+import { RejectDialog } from "@/components/RejectDialog";
 
 const STATUS_FILTERS = [
   { value: "submitted", label: "Awaiting Review" },
@@ -105,6 +106,7 @@ export default function AdminSubmissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("submitted");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bundleAudit, setBundleAudit] = useState<Record<string, AuditEvent[]>>({});
@@ -246,6 +248,26 @@ export default function AdminSubmissionsPage() {
         ))}
       </div>
 
+      {rejectTarget && (
+        <RejectDialog
+          title="Analysis Bundle"
+          onConfirm={async (reason) => {
+            setActionError(null);
+            setActionLoading(true);
+            try {
+              await rejectBundle(rejectTarget, reason);
+              setRejectTarget(null);
+              await load();
+            } catch (e) {
+              setActionError(e instanceof Error ? e.message : "Rejection failed");
+            } finally {
+              setActionLoading(false);
+            }
+          }}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
+
       {actionError && (
         <div
           style={{
@@ -350,9 +372,7 @@ export default function AdminSubmissionsPage() {
                                       color: "#fff",
                                       border: "none",
                                     }}
-                                    onClick={() =>
-                                      handleAction("Reject", b.id, rejectBundle)
-                                    }
+                                    onClick={() => setRejectTarget(b.id)}
                                     disabled={actionLoading}
                                   >
                                     {actionLoading ? "Processing…" : "Reject"}
@@ -433,6 +453,12 @@ export default function AdminSubmissionsPage() {
                 {/* Overview */}
                 <section aria-label="Submission Overview">
                   <h3 style={sectionHeader}>Overview</h3>
+                  {b.rejection_reason && (
+                    <div style={{ ...detailRow, flexDirection: "column", gap: "2px", marginBottom: "var(--spacing-sm)", padding: "8px 12px", background: "#f8d7da", borderRadius: "4px" }}>
+                      <span style={detailLabel}>Rejection reason</span>
+                      <span style={detailValue}>{b.rejection_reason}</span>
+                    </div>
+                  )}
                   {b.description && (
                     <div style={detailRow}>
                       <span style={detailLabel}>Description</span>

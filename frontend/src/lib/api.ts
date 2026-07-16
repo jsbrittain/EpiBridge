@@ -88,6 +88,7 @@ export interface AnalysisBundle {
   project_id: string;
   created_by_id: string;
   submitted_by_id?: string;
+  rejection_reason?: string | null;
   project_name?: string;
   execution_environment_id: string | null;
   name: string;
@@ -181,6 +182,7 @@ export interface OutputSet {
   execution_request_name: string;
   status: string;
   release_package_size: number | null;
+  rejection_reason?: string | null;
   outputs: Output[];
   file_count: number;
   created_at: string;
@@ -194,6 +196,7 @@ export interface OutputSetListItem {
   status: string;
   file_count: number;
   release_package_size: number | null;
+  rejection_reason?: string | null;
   requested_by_id?: string;
   project_name?: string;
   created_at: string;
@@ -393,8 +396,11 @@ export async function approveOutputSet(outputSetId: string): Promise<OutputSet> 
   return request<OutputSet>(`/api/admin/output-sets/${outputSetId}/approve`, { method: "POST" });
 }
 
-export async function rejectOutputSet(outputSetId: string): Promise<OutputSet> {
-  return request<OutputSet>(`/api/admin/output-sets/${outputSetId}/reject`, { method: "POST" });
+export async function rejectOutputSet(outputSetId: string, reason: string): Promise<OutputSet> {
+  return request<OutputSet>(`/api/admin/output-sets/${outputSetId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }
 
 export async function releaseOutputSet(outputSetId: string): Promise<OutputSet> {
@@ -602,10 +608,11 @@ export async function approveBundle(
 
 export async function rejectBundle(
   bundleId: string,
+  reason: string,
 ): Promise<AnalysisBundle> {
   return request<AnalysisBundle>(
     `/api/admin/bundles/${bundleId}/reject`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ reason }) },
   );
 }
 

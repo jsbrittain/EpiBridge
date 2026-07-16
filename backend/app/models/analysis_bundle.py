@@ -93,6 +93,13 @@ class AnalysisBundle(Base):
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejected_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    rejected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -106,6 +113,7 @@ class AnalysisBundle(Base):
         backref="created_bundles",
     )
     submitted_by: Mapped["User | None"] = relationship(foreign_keys=[submitted_by_id])
+    rejected_by: Mapped["User | None"] = relationship(foreign_keys=[rejected_by_id])
     execution_environment: Mapped["ExecutionEnvironment | None"] = relationship()
     execution_image: Mapped["ExecutionImage | None"] = relationship()
 

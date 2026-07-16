@@ -8,7 +8,7 @@ PYTHON       ?= python3
 -include .epibridge-context
 EPIBRIDGE_TARGET ?= native
 
-.PHONY: install uninstall certs ai demo up down logs shell build upgrade backup restore clean-db reset deploy deploy-dev dev test format lint fix playwright ci ci-clean
+.PHONY: install uninstall certs ai demo up down logs shell build restart upgrade backup restore clean-db deploy deploy-dev dev test format lint fix playwright ci ci-clean
 
 # --- Installation ----------------------------------------------------------------
 # install is the canonical first-run experience.  Accepts an optional TARGET
@@ -239,6 +239,10 @@ logs:
 shell:
 	./scripts/platform.sh shell
 
+restart:
+	./scripts/platform.sh compose build backend frontend worker
+	./scripts/platform.sh compose up -d
+
 SVC ?=
 build:
 	./scripts/platform.sh compose build $(SVC)
@@ -260,9 +264,7 @@ ci-clean:
 
 # --- Development ----------------------------------------------------------------
 
-dev:
-	./scripts/platform.sh compose build backend frontend worker
-	./scripts/platform.sh compose up -d
+dev: restart
 	./scripts/platform.sh run ./scripts/seed-developer.sh
 	./scripts/platform.sh run ./scripts/seed-personas.sh
 
@@ -342,14 +344,6 @@ clean-db:
 		 ./scripts/platform.sh compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
 	./scripts/platform.sh restart backend
 	@echo "=== Database reset (all tables recreated on startup) ==="
-
-reset:
-	$(MAKE) clean-db
-	./scripts/platform.sh run ./scripts/bootstrap.sh
-	./scripts/platform.sh run ./scripts/seed-institution.sh
-	./scripts/platform.sh run ./scripts/seed-personas.sh
-	./scripts/platform.sh run ./scripts/seed-developer.sh
-	@echo "=== Development environment reset to known-good state ==="
 
 # --- Internal targets ---------------------------------------------------------
 

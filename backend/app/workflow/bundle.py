@@ -32,10 +32,21 @@ def approve_bundle(db: Session, bundle: AnalysisBundle) -> AnalysisBundle:
     return bundle
 
 
-def reject_bundle(db: Session, bundle: AnalysisBundle) -> AnalysisBundle:
+def reject_bundle(
+    db: Session,
+    bundle: AnalysisBundle,
+    *,
+    reason: str,
+    rejected_by_id: uuid.UUID | None = None,
+) -> AnalysisBundle:
     if bundle.status != AnalysisBundleStatus.SUBMITTED.value:
         raise ValueError(f"Cannot reject bundle in state: {bundle.status}")
+    if not reason or not reason.strip():
+        raise ValueError("Rejection reason is required")
     bundle.status = AnalysisBundleStatus.REJECTED.value
+    bundle.rejection_reason = reason.strip()
+    bundle.rejected_by_id = rejected_by_id
+    bundle.rejected_at = datetime.now(timezone.utc)
     return bundle
 
 

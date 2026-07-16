@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from app.models.output_set import OutputSet, OutputSetStatus
@@ -13,12 +16,23 @@ def approve_output_set(db: Session, output_set: OutputSet) -> OutputSet:
     return output_set
 
 
-def reject_output_set(db: Session, output_set: OutputSet) -> OutputSet:
+def reject_output_set(
+    db: Session,
+    output_set: OutputSet,
+    *,
+    reason: str,
+    rejected_by_id: uuid.UUID | None = None,
+) -> OutputSet:
     if output_set.status != OutputSetStatus.PENDING_REVIEW:
         raise ValueError(
             f"Cannot reject output set in state: {output_set.status.value}"
         )
+    if not reason or not reason.strip():
+        raise ValueError("Rejection reason is required")
     output_set.status = OutputSetStatus.REJECTED
+    output_set.rejection_reason = reason.strip()
+    output_set.rejected_by_id = rejected_by_id
+    output_set.rejected_at = datetime.now(timezone.utc)
     return output_set
 
 

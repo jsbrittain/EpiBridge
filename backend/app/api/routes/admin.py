@@ -19,13 +19,17 @@ from app.models.execution_environment import ExecutionEnvironment
 from app.models.platform_setting import SettingKey
 from app.models.user import User
 from app.schemas.ai_bundle_review import AIBundleReviewRead
-from app.schemas.analysis_bundle import AnalysisBundleRead
+from app.schemas.analysis_bundle import AnalysisBundleRead, RejectBundleRequest
 from app.schemas.audit_event import AuditEventList
 from app.schemas.data_resource import DataResourceRead
 from app.schemas.execution_environment import ExecutionEnvironmentAdminRead
 from app.schemas.execution_request import ExecutionRequestRead
 from app.schemas.output import OutputRead
-from app.schemas.output_set import OutputSetListItem, OutputSetRead
+from app.schemas.output_set import (
+    OutputSetListItem,
+    OutputSetRead,
+    RejectOutputSetRequest,
+)
 from app.schemas.platform_setting import PlatformSettingRead, PlatformSettingUpdate
 from app.schemas.terms import TermsOfServicePublish, TermsOfServiceRead
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -203,6 +207,7 @@ def list_bundles(
             project_id=b.project_id,
             created_by_id=b.created_by_id,
             submitted_by_id=b.submitted_by_id,
+            rejection_reason=b.rejection_reason,
             execution_environment_id=b.execution_environment_id,
             name=b.name,
             source_path=b.source_path,
@@ -253,6 +258,7 @@ def get_bundle(
         project_id=bundle.project_id,
         created_by_id=bundle.created_by_id,
         submitted_by_id=bundle.submitted_by_id,
+        rejection_reason=bundle.rejection_reason,
         execution_environment_id=bundle.execution_environment_id,
         name=bundle.name,
         source_path=bundle.source_path,
@@ -415,6 +421,7 @@ def list_admin_output_sets(
                 status=s.status,
                 file_count=len(s.outputs) if s.outputs else 0,
                 release_package_size=s.release_package_size,
+                rejection_reason=s.rejection_reason,
                 requested_by_id=req.requested_by_id if req else None,
                 project_name=req.project.name if req and req.project else "",
                 created_at=s.created_at,
@@ -448,6 +455,7 @@ def get_admin_output_set(
         execution_request_name=req.name if req else "",
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
@@ -494,6 +502,7 @@ def list_admin_execution_request_outputs(
         execution_request_name=request.name,
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
@@ -595,6 +604,7 @@ def post_admin_approve_output_set(
         execution_request_name=req.name if req else "",
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
@@ -618,6 +628,7 @@ def post_admin_approve_output_set(
 )
 def post_admin_reject_output_set(
     output_set_id: str,
+    body: RejectOutputSetRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -643,7 +654,9 @@ def post_admin_reject_output_set(
             detail="You cannot moderate your own work",
         )
     try:
-        reject_output_set(db, output_set)
+        reject_output_set(
+            db, output_set, reason=body.reason, rejected_by_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -668,6 +681,7 @@ def post_admin_reject_output_set(
         execution_request_name=req.name if req else "",
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
@@ -753,6 +767,7 @@ def post_admin_release_output_set(
         execution_request_name=req.name if req else "",
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
@@ -906,6 +921,7 @@ def _admin_bundle_to_read(
         project_id=bundle.project_id,
         created_by_id=bundle.created_by_id,
         submitted_by_id=bundle.submitted_by_id,
+        rejection_reason=bundle.rejection_reason,
         execution_environment_id=bundle.execution_environment_id,
         name=bundle.name,
         source_path=bundle.source_path,
@@ -989,6 +1005,7 @@ def post_admin_approve_bundle(
 )
 def post_admin_reject_bundle(
     bundle_id: str,
+    body: RejectBundleRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1006,7 +1023,7 @@ def post_admin_reject_bundle(
             detail="You cannot moderate your own work",
         )
     try:
-        reject_bundle(db, bundle)
+        reject_bundle(db, bundle, reason=body.reason, rejected_by_id=current_user.id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

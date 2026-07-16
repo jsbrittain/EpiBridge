@@ -126,6 +126,7 @@ The Makefile is the supported administration interface. Public targets describe 
 ```text
 make install       Full installation (target-specific)
 make uninstall     Stop and remove the environment
+make restart       Rebuild and restart development services; preserve state
 make up            Start all services
 make down          Stop all services
 make logs          Tail container logs
@@ -133,7 +134,8 @@ make shell         Interactive session on the platform host
 make certs         Regenerate TLS certificates
 make ai            Enable AI assistance
 make demo          Seed evaluation personas
-make dev           Rebuild and restart development services
+make dev           Restart + seed development data
+make clean-db      Drop and recreate database schema
 make test          Run unit, integration, and smoke tests
 ```
 
@@ -328,6 +330,31 @@ ProjectMembership answers one question only: does this User participate in this 
 - No roles, capabilities, or permissions are stored on membership.
 - The project creator becomes the first member automatically.
 - Access requires: (1) membership in the project, (2) the required capability.
+
+### Governance Provenance
+
+Governance state is stored directly on governed entities (AnalysisBundle, OutputSet)
+as explicit provenance, not inferred from audit history. The audit trail records
+*that* a governance action occurred; the governed entity records the current
+state and *why*.
+
+Explicit provenance is added to a governed entity where it contributes state that
+downstream behaviour depends on. At present:
+
+- **Submission provenance** (`submitted_by_id`, `submitted_at`) — governance
+  independence (self-moderation guard) checks who submitted.
+- **Rejection provenance** (`rejection_reason`, `rejected_by_id`, `rejected_at`) —
+  the rejection reason is part of the current governance state and must be
+  visible to researchers without an audit join.
+- **Execution provenance** (`requested_by` on ExecutionRequest) — truthfully
+  records who initiated execution.
+
+Approval currently introduces no additional domain state beyond the approval
+event itself — no explanatory payload is needed, and no downstream behaviour
+depends on knowing the approver without consulting the audit trail. The audit
+record is therefore sufficient. If a future requirement demands querying "who
+approved this entity" without an audit join, explicit approval provenance can
+be added following the same pattern.
 
 ### Audit Event Model
 
@@ -754,7 +781,8 @@ All three are created idempotently — re-running bootstrap does not duplicate t
 The standard development workflow:
 
 ```bash
-make dev          # rebuild and restart development services (current backend)
+make restart      # rebuild and restart development services (current backend)
+make dev          # restart + seed development data (after schema reset)
 make format       # auto-format code
 make lint         # static analysis
 make test         # run tests
@@ -848,7 +876,8 @@ createdb epibridge_test
 
 **Makefile dev targets** (Multipass/OrbStack-specific, uses `scripts/platform.sh` under the hood):
 - `make install` — first-run: create VM, mount repo, bootstrap, seed
-- `make dev` — incremental: rebuild code containers, restart services (no seeding)
+- `make restart` — rebuild and restart code containers (backend, frontend, worker); preserves all state
+- `make dev` — restart + re-seed development data (idempotent seeding, safe to run repeatedly)
 - `make dev-ai` — start the optional Ollama service on an already-running stack
 - `make dev-up` — start services (individual step)
 - `make dev-down` — stop services (individual step)

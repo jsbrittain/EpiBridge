@@ -38,6 +38,7 @@ import {
 import { formatBundleStatus, bundleStatusStyle } from "@/lib/status";
 import LogViewer from "@/components/LogViewer";
 import { TermsDialog } from "@/components/TermsDialog";
+import { RejectDialog } from "@/components/RejectDialog";
 
 const TERMINAL_STATUSES = ["completed", "failed", "unavailable"];
 
@@ -53,6 +54,7 @@ export default function AnalysisDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [termsResourceId, setTermsResourceId] = useState<string | null>(null);
   const [termsResourceName, setTermsResourceName] = useState<string>("");
   const [bundleFiles, setBundleFiles] = useState<BundleFile[]>([]);
@@ -329,7 +331,7 @@ export default function AnalysisDetailPage() {
     performAction("Approve", () => approveBundle(bundleId));
 
   const handleReject = () =>
-    performAction("Reject", () => rejectBundle(bundleId));
+    setShowRejectDialog(true);
 
   const handleSupersede = () =>
     performAction("Supersede", () => supersedeBundle(bundleId));
@@ -517,6 +519,17 @@ export default function AnalysisDetailPage() {
           />
         )}
 
+        {showRejectDialog && (
+          <RejectDialog
+            title="Analysis Bundle"
+            onConfirm={async (reason) => {
+              await performAction("Reject", () => rejectBundle(bundleId, reason));
+              setShowRejectDialog(false);
+            }}
+            onCancel={() => setShowRejectDialog(false)}
+          />
+        )}
+
         <Link
           href={`/projects/${projectId}/analysis`}
           style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", textDecoration: "none" }}
@@ -578,6 +591,11 @@ export default function AnalysisDetailPage() {
             >
               {formatBundleStatus(bundle.status)}
             </span>
+            {bundle.status === "rejected" && bundle.rejection_reason && (
+              <div style={{ marginTop: "var(--spacing-sm)", padding: "8px 12px", background: "#f8d7da", borderRadius: "4px", fontSize: "0.85rem", lineHeight: 1.5 }}>
+                <strong>Reason:</strong> {bundle.rejection_reason}
+              </div>
+            )}
             <div style={{ marginTop: "var(--spacing-sm)", fontSize: "0.85rem", fontWeight: 600 }}>
               {bundle.build_status === "environment_ready" && (
                 <span style={{ color: "#2e7d32" }}>Ready to run</span>

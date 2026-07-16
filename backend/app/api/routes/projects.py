@@ -75,6 +75,7 @@ from app.services.execution_request_service import (
 )
 from app.services.notification_triggers import trigger_bundle_submitted_notifications
 from app.services.output_set_service import (
+    get_output_set_by_execution,
     get_released_output_set,
     list_outputs_by_set,
     stream_release_package,
@@ -133,6 +134,7 @@ def _bundle_to_read(bundle: AnalysisBundle, build_log: str = "") -> AnalysisBund
         project_id=bundle.project_id,
         created_by_id=bundle.created_by_id,
         submitted_by_id=bundle.submitted_by_id,
+        rejection_reason=bundle.rejection_reason,
         execution_environment_id=bundle.execution_environment_id,
         name=bundle.name,
         source_path=bundle.source_path,
@@ -784,11 +786,11 @@ def get_execution_request_outputs(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Execution request not found",
         )
-    output_set = get_released_output_set(db, request_id)
+    output_set = get_output_set_by_execution(db, request_id)
     if output_set is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No released outputs found for this execution request",
+            detail="No outputs found for this execution request",
         )
     outputs = list_outputs_by_set(db, output_set.id)
     return OutputSetRead(
@@ -797,6 +799,7 @@ def get_execution_request_outputs(
         execution_request_name=request.name,
         status=output_set.status,
         release_package_size=output_set.release_package_size,
+        rejection_reason=output_set.rejection_reason,
         outputs=[
             OutputRead(
                 id=o.id,
