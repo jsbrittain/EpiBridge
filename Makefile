@@ -368,7 +368,7 @@ test:
 # Uses a compose override to increase the login rate limit for the
 # Playwright suite (51 sequential API logins across 8 tests).
 playwright:
-	docker compose -f docker-compose.yml -f docker-compose.playwright.yml up -d backend
+	./scripts/platform.sh compose -f docker-compose.yml -f docker-compose.playwright.yml up -d backend
 	@BASE=$${PLAYWRIGHT_BASE_URL:-$$(sed -n 's/^EPIBRIDGE_REACHABLE_URL=//p' .epibridge-context 2>/dev/null || true)}; \
 	if [ -z "$$BASE" ] && [ -f .env ]; then \
 		BASE=$$(sed -n 's/^PUBLIC_URL=//p' .env 2>/dev/null || true); \
