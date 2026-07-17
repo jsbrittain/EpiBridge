@@ -311,14 +311,20 @@ Capability vocabulary (defined in `app.models.capability.Capability` enum):
 | `bundle.submit` | Submit bundles for review |
 | `bundle.review` | Approve/reject/supersede bundles |
 | `execution.run` | Request execution of approved bundles |
+| `execution.read` | View execution requests and their status (admin) |
+| `execution.cancel` | Cancel pending or running executions |
 | `output.review` | Approve/reject output sets |
 | `output.release` | Release output sets to researchers |
 | `environment.manage` | Manage execution environments |
 | `data.manage` | Manage data resources |
-| `user.manage` | Manage user accounts |
+| `user.manage` | Manage user accounts (create, update, delete) |
+| `user.read` | List and view user accounts (read-only) |
 | `terms.manage` | Publish and manage terms of service |
+| `settings.manage` | View and update platform settings |
+| `audit.read` | Query the audit ledger |
 | `validation.run` | Run validation against representative datasets |
 | `build.customize` | Use Custom Build strategy for analysis bundles |
+| `governance.self_regulate` | Bypass self-moderation prevention |
 
 The `capabilities` table is materialised from the enum during seeding (the enum is authoritative). `UserCapability` records are copied from role templates at user creation and become independent thereafter.
 
@@ -396,7 +402,7 @@ Supports pagination via `limit` (max 200) and `offset`, and ordering via `order`
 
 Returns actor details (display name, email) alongside each event via a join to the `users` table.
 
-Access requires one of: `bundle.review`, `output.review`, or `user.manage` capability.
+Access requires the `audit.read` capability.
 
 Defined in `app.api.routes.admin` and `app.services.audit_service`.
 
@@ -495,8 +501,9 @@ Every `/api/admin/*` endpoint enforces a capability check. The requirements are:
 | `GET /admin/output-sets`, `GET /admin/output-sets/{id}` | `output.review` |
 | `GET /admin/execution-requests/{id}/outputs` | `output.review` |
 | `GET /admin/outputs/{id}` | `output.review` |
-| `GET /admin/users`, `GET /admin/users/{id}`, `POST /admin/users` | `user.manage` |
-| `GET /admin/audit-events` | Tiered: `bundle.review` / `output.review` / `user.manage` |
+| `GET /admin/users`, `GET /admin/users/{id}` | `user.manage` or `user.read` |
+| `POST /admin/users`, `PUT /admin/users/{id}` | `user.manage` |
+| `GET /admin/audit-events` | `audit.read` |
 | `POST /admin/terms/platform` | `terms.manage` |
 | `POST /admin/resources/{id}/terms/publish` | `terms.manage` |
 | `GET /admin/terms/status` | `terms.manage` |

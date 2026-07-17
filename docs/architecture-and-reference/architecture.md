@@ -231,14 +231,20 @@ Capability vocabulary:
 | `bundle.submit` | Submit bundles for review |
 | `bundle.review` | Approve/reject/supersede bundles |
 | `execution.run` | Request execution of approved bundles |
+| `execution.read` | View execution requests and their status (admin) |
+| `execution.cancel` | Cancel pending or running executions |
 | `output.review` | Approve/reject output sets |
 | `output.release` | Release output sets to researchers |
 | `environment.manage` | Manage execution environments |
 | `data.manage` | Manage data resources |
-| `user.manage` | Manage user accounts |
+| `user.manage` | Manage user accounts (create, update, delete) |
+| `user.read` | List and view user accounts (read-only) |
 | `terms.manage` | Publish and manage terms of service |
+| `settings.manage` | View and update platform settings |
+| `audit.read` | Query the audit ledger |
 | `validation.run` | Run validation against representative datasets |
 | `build.customize` | Use Custom Build strategy for analysis bundles |
+| `governance.self_regulate` | Bypass self-moderation prevention |
 
 The `capabilities` table is materialised from the enum during seeding (the enum is authoritative). `UserCapability` records are copied from role templates at user creation and become independent thereafter.
 
