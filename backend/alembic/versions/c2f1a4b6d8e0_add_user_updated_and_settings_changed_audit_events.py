@@ -22,12 +22,8 @@ depends_on = None
 
 
 def upgrade():
-    op.execute(
-        "ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'user.updated'"
-    )
-    op.execute(
-        "ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'settings.changed'"
-    )
+    op.execute("ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'user.updated'")
+    op.execute("ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'settings.changed'")
 
 
 def downgrade():
