@@ -8,7 +8,7 @@ PYTHON       ?= python3
 -include .epibridge-context
 EPIBRIDGE_TARGET ?= native
 
-.PHONY: install uninstall certs ai demo up down logs shell build restart upgrade backup restore clean-db deploy deploy-dev dev test format lint fix playwright ci ci-clean
+.PHONY: install uninstall certs ai demo start up down logs shell build restart upgrade backup restore clean-db deploy deploy-dev dev test format lint fix playwright ci ci-clean
 
 # --- Installation ----------------------------------------------------------------
 # install is the canonical first-run experience.  Accepts an optional TARGET
@@ -226,6 +226,9 @@ demo:
 	./scripts/platform.sh run ./scripts/seed-demo.sh
 
 # --- Platform lifecycle ---------------------------------------------------------
+
+start:
+	./scripts/platform.sh start
 
 up:
 	./scripts/platform.sh compose up -d
