@@ -6,13 +6,13 @@ import { getAdminSettings, getAIStatus, AIStatus, updateAdminSetting } from "@/l
 function aiStatusWarning(reason: string | null): string {
   switch (reason) {
     case "provider_unreachable":
-      return "The AI service is not running. Run make ai on the server to start it.";
+      return "The AI service is not running. Run make enable-ai on the server to start it.";
     case "model_missing":
-      return "The AI model is not available. Run make ai on the server to download it.";
+      return "The AI model is not available. Run make enable-ai on the server to download it.";
     case "provider_error":
       return "The AI service returned an error. Check the platform logs.";
     default:
-      return "The AI subsystem is not ready. Run make ai on the server to prepare it.";
+      return "The AI subsystem is not ready. Run make enable-ai on the server to prepare it.";
   }
 }
 
@@ -214,7 +214,7 @@ export default function AdminSettingsPage() {
           <strong>AI subsystem unavailable</strong>
           <p style={{ margin: "var(--spacing-xs) 0 0 0", fontSize: "0.85rem" }}>
             AI-assisted bundle review is enabled but the AI subsystem is not operational.
-            {" "}Run make ai on the server to restore it.
+            {" "}Run make enable-ai on the server to restore it.
           </p>
         </div>
       )}

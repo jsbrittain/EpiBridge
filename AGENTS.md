@@ -126,16 +126,16 @@ The Makefile is the supported administration interface. Public targets describe 
 ```text
 make install       Full installation (target-specific)
 make uninstall     Stop and remove the environment
-make restart       Rebuild and restart development services; preserve state
-make up            Start all services
-make down          Stop all services
+make restart       Stop then start services; preserve state
+make start         Start all services
+make stop          Stop all services
 make logs          Tail container logs
 make shell         Interactive session on the platform host
 make certs         Regenerate TLS certificates
-make ai            Enable AI assistance
-make demo          Seed evaluation personas
+make enable-ai     Enable AI assistance
+make seed-demo     Seed evaluation personas
 make dev           Restart + seed development data
-make clean-db      Drop and recreate database schema
+make dev-drop-db   Drop and recreate database schema (development only; destructive)
 make test          Run unit, integration, and smoke tests
 ```
 
@@ -519,7 +519,7 @@ Alembic is the single authoritative mechanism for database schema management.
 
 > **Migration history reset (Milestone 24.4):** The development migration chain was
 > squashed to a single baseline. Existing local development databases created
-> before this squash must be recreated. Run `make clean-db` or `make install` to
+> before this squash must be recreated. Run `make dev-drop-db` or `make install` to
 > initialise a fresh database using the new baseline.
 
 **Developer workflow for schema changes:**
@@ -812,8 +812,8 @@ make test         # run tests
 **Makefile targets** (portable, delegates execution to `platform.sh`):
 - `make deploy` — production install (SSH)
 - `make install` — local installation (defaults to Multipass VM)
-- `make up` — docker compose up -d
-- `make down` — docker compose down
+- `make start` — bring an existing installation online
+- `make stop` — shut down gracefully
 - `make upgrade` — run upgrade.sh
 - `make backup` — run backup.sh
 - `make restore FILE=<file>` — restore from backup
@@ -878,14 +878,14 @@ createdb epibridge_test
 - `make install` — first-run: create VM, mount repo, bootstrap, seed
 - `make restart` — rebuild and restart code containers (backend, frontend, worker); preserves all state
 - `make dev` — restart + re-seed development data (idempotent seeding, safe to run repeatedly)
-- `make dev-ai` — start the optional Ollama service on an already-running stack
-- `make dev-up` — start services (individual step)
-- `make dev-down` — stop services (individual step)
-- `make dev-shell` — interactive VM shell (individual step)
-- `make dev-logs` — tail container logs (individual step)
+- `make enable-ai` — enable AI assistance
+- `make start` — bring an existing installation online (individual step)
+- `make stop` — shut down gracefully (individual step)
+- `make shell` — interactive VM shell (individual step)
+- `make logs` — tail container logs (individual step)
 - `make dev-destroy` — factory reset (remove containers, volumes, VM, .env)
-- `make clean-db` — reset database (all researcher artefacts dropped, schema recreated on next startup)
-- `make dev-build SVC=frontend` — rebuild and restart a single service (fastest iteration)
+- `make dev-drop-db` — reset database (all researcher artefacts dropped, schema recreated on next startup)
+- `make build SVC=frontend` — rebuild and restart a single service (fastest iteration)
 
 **VM / Dev environment** (see `vm/runtime.md`):
 - `scripts/orbstack.sh` — OrbStack-specific helpers (create, mount, ssh, ip)

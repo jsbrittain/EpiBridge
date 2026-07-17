@@ -8,7 +8,7 @@ PYTHON       ?= python3
 -include .epibridge-context
 EPIBRIDGE_TARGET ?= native
 
-.PHONY: install uninstall certs ai demo start up down logs shell build restart upgrade backup restore clean-db deploy deploy-dev dev test format lint fix playwright ci ci-clean
+.PHONY: install uninstall start stop restart build upgrade backup restore certs enable-ai seed-demo logs shell register-resources register-resource dev-prune-resources dev dev-test dev-destroy dev-drop-db deploy deploy-dev ci ci-clean test format lint fix playwright new-data-resource
 
 # --- Installation ----------------------------------------------------------------
 # install is the canonical first-run experience.  Accepts an optional TARGET
@@ -22,34 +22,6 @@ EPIBRIDGE_TARGET ?= native
 # Idempotent — safe to run repeatedly.
 
 TARGET ?= multipass
-
-# Generate and apply TLS certificates for the hostname derived from PUBLIC_URL.
-# Applies the certificate configuration to the running installation: generates
-# or refreshes certificates, then restarts the reverse proxy so that new
-# certificates take effect immediately.
-# Uses mkcert when available; falls back to self-signed certificates.
-# Idempotent: safe to run at any time.
-certs:
-	./scripts/setup-certs.sh
-	@if [ -f .epibridge-context ]; then \
-		echo "Restarting reverse proxy..."; \
-		if ./scripts/platform.sh restart reverse-proxy; then \
-			echo ""; \
-			echo "✓ Certificate configuration applied."; \
-		else \
-			echo ""; \
-			echo "Certificates were generated successfully."; \
-			echo ""; \
-			echo "The new certificates are not yet active because the reverse"; \
-			echo "proxy could not be restarted automatically."; \
-			echo ""; \
-			echo "Please restart the reverse proxy manually, then revisit:"; \
-			echo ""; \
-			echo "    https://localhost"; \
-			echo ""; \
-			false; \
-		fi; \
-	fi
 
 install:
 	$(eval ENV_FRESH := $(shell [ -f .env ] && echo "no" || echo "yes"))
@@ -131,9 +103,8 @@ endif
 	@echo ""
 	@echo "To prepare an evaluation environment:"
 	@echo ""
-	@echo "    make demo"
+	@echo "    make seed-demo"
 
-# --- Uninstall -------------------------------------------------------------------
 # uninstall stops the platform and removes the installation.
 # Dispatch depends on the execution context (.epibridge-context).
 # The Git working tree and .env are preserved.
@@ -170,15 +141,81 @@ uninstall:
 		echo ".env preserved at $$PWD/.env"; \
 	fi
 
-# Enable and prepare AI assistance for this EpiBridge installation.
-# Configures the platform, starts AI services, pulls the configured
-# model, restarts affected services, and verifies AI is operational.
+# --- Operations -------------------------------------------------------------------
+# start, stop, and restart are the primary lifecycle commands.
+# start is the single command to bring an existing installation online.
+# restart is stop followed by start — no rebuild, no reseed, no migration.
+# upgrade, backup, and restore are maintenance operations.
+
+# Start a running EpiBridge installation.  If the platform runs inside a VM,
+# the VM is started first; then all services are started.
+# No rebuild, no reseed, no migration — this is purely start after stop or reboot.
+start:
+	./scripts/platform.sh start
+	./scripts/platform.sh compose up -d
+
+# Stop all services gracefully.  All persistent state is preserved.
+stop:
+	./scripts/platform.sh compose down
+
+# Stop then start.  No image rebuild — containers restart with their
+# existing images.  Use `make upgrade` to update images.
+restart:
+	./scripts/platform.sh compose down
+	./scripts/platform.sh compose up -d
+
+# Build a single service image.  SVC defaults to all services.
+SVC ?=
+build:
+	./scripts/platform.sh compose build $(SVC)
+	./scripts/platform.sh compose up -d $(SVC)
+
+# Pull latest code, rebuild all images, start services, run migrations.
+upgrade:
+	./scripts/platform.sh run ./scripts/upgrade.sh
+
+# Create a backup archive (pg_dump + tarball).  Stores off-VM guidance
+# is in the backup and recovery documentation.
+backup:
+	./scripts/platform.sh run ./scripts/backup.sh
+
+# Restore from a backup archive.  Overwrites current database and filesystem.
+restore:
+	./scripts/platform.sh run ./scripts/restore.sh $(FILE)
+
+# Regenerate TLS certificates, restart reverse proxy.
+# Idempotent: safe to run at any time.
+certs:
+	./scripts/setup-certs.sh
+	@if [ -f .epibridge-context ]; then \
+		echo "Restarting reverse proxy..."; \
+		if ./scripts/platform.sh restart reverse-proxy; then \
+			echo ""; \
+			echo "✓ Certificate configuration applied."; \
+		else \
+			echo ""; \
+			echo "Certificates were generated successfully."; \
+			echo ""; \
+			echo "The new certificates are not yet active because the reverse"; \
+			echo "proxy could not be restarted automatically."; \
+			echo ""; \
+			echo "Please restart the reverse proxy manually, then revisit:"; \
+			echo ""; \
+			echo "    https://localhost"; \
+			echo ""; \
+			false; \
+		fi; \
+	fi
+
+# --- Administration ---------------------------------------------------------------
+# Platform configuration and resource management.
+
+# Enable and prepare AI assistance.
 # Idempotent — safe to run at any time.
-.PHONY: ai
 OLLAMA_MODEL := $(shell grep '^OLLAMA_MODEL=' .env 2>/dev/null | cut -d= -f2-)
 OLLAMA_MODEL ?= llama3.2
 
-ai:
+enable-ai:
 	./scripts/setup-ai.sh
 	@if [ -f .epibridge-context ]; then \
 		echo "Starting AI services..."; \
@@ -217,48 +254,11 @@ ai:
 		false; \
 	fi
 
-# --- Evaluation ----------------------------------------------------------------
-# demo seeds evaluation personas and prints the welcome message.
-# Dispatch depends on the execution context (.epibridge-context).
-
-demo:
+# Seed evaluation personas and print welcome message.
+# Idempotent: safe to run multiple times.
+seed-demo:
 	./scripts/platform.sh run ./scripts/seed-personas.sh
 	./scripts/platform.sh run ./scripts/seed-demo.sh
-
-# --- Platform lifecycle ---------------------------------------------------------
-
-start:
-	./scripts/platform.sh start
-
-up:
-	./scripts/platform.sh compose up -d
-
-down:
-	./scripts/platform.sh compose down
-
-logs:
-	./scripts/platform.sh logs -f
-
-shell:
-	./scripts/platform.sh shell
-
-restart:
-	./scripts/platform.sh compose build backend frontend worker
-	./scripts/platform.sh compose up -d
-
-SVC ?=
-build:
-	./scripts/platform.sh compose build $(SVC)
-	./scripts/platform.sh compose up -d $(SVC)
-
-# --- Data resource management ---------------------------------------------------
-
-# Scaffold a new data resource skeleton from a template.
-# After populating the skeleton with data and customising the manifest,
-# run `make register-resources` to register it with EpiBridge.
-# Usage: make new-resource ID=uk-biobank NAME="UK Biobank Serum" PROVIDER=csv
-new-resource:
-	./scripts/new-resource.sh "$(ID)" "$(NAME)" "$(PROVIDER)"
 
 # Register all resource manifests with EpiBridge.
 # Creates new resources; skips previously registered ones.
@@ -269,34 +269,13 @@ register-resources:
 register-resource:
 	./scripts/platform.sh exec backend python -m app.cli resource-register "$(ID)"
 
-# Remove stale resource registrations (developer utility only).
-# Removes resources whose manifest directory no longer exists on disk.
-# Resources still referenced by projects or bundles are preserved
-# by database constraints.
-clean-resources:
-	./scripts/platform.sh exec backend python -m app.cli resource-clean
+# Tail container logs.
+logs:
+	./scripts/platform.sh logs -f
 
-ci:
-	./scripts/init-config.sh
-	./scripts/platform.sh run ./scripts/bootstrap.sh
-	./scripts/platform.sh run ./scripts/seed-institution.sh
-	./scripts/platform.sh run ./scripts/seed-personas.sh
-	./scripts/platform.sh run ./scripts/seed-developer.sh
-	@echo "EPIBRIDGE_TARGET=native" > .epibridge-context
-
-ci-clean:
-	./scripts/platform.sh compose down -v
-	rm -f .env
-
-# --- Development ----------------------------------------------------------------
-
-dev: restart
-	./scripts/platform.sh run ./scripts/seed-institution.sh
-	./scripts/platform.sh run ./scripts/seed-developer.sh
-	./scripts/platform.sh run ./scripts/seed-personas.sh
-
-dev-test:
-	./scripts/platform.sh exec backend python3 -m pytest tests/unit tests/integration tests/smoke -v --no-header -q --tb=short
+# Interactive session on the platform host.
+shell:
+	./scripts/platform.sh shell
 
 # --- Production deployment (SSH to Ubuntu VM) ----------------------------------
 
@@ -314,22 +293,48 @@ deploy-dev:
 	@echo "EPIBRIDGE_USER=$(VM_USER)" >> .epibridge-context
 	@echo "EPIBRIDGE_DIR=$(VM_DIR)" >> .epibridge-context
 
-upgrade:
-	./scripts/platform.sh run ./scripts/upgrade.sh
+# --- Development ------------------------------------------------------------------
+# Local development, testing, and CI workflows.
 
-backup:
-	./scripts/platform.sh run ./scripts/backup.sh
+dev: restart
+	./scripts/platform.sh run ./scripts/seed-institution.sh
+	./scripts/platform.sh run ./scripts/seed-developer.sh
+	./scripts/platform.sh run ./scripts/seed-personas.sh
 
-restore:
-	./scripts/platform.sh run ./scripts/restore.sh $(FILE)
+dev-test:
+	./scripts/platform.sh exec backend python3 -m pytest tests/unit tests/integration tests/smoke -v --no-header -q --tb=short
 
-# --- Code quality ------------------------------------------------------------
+dev-destroy:
+	./scripts/platform.sh compose down
+	@echo "=== Development containers stopped ==="
+
+# Scaffold a new data resource skeleton from a template.
+# Usage: make new-data-resource ID=uk-biobank NAME="UK Biobank Serum" PROVIDER=csv
+new-data-resource:
+	./scripts/new-resource.sh "$(ID)" "$(NAME)" "$(PROVIDER)"
+
+# Remove stale resource registrations (developer utility only).
+# Removes resources whose manifest directory no longer exists on disk.
+# Resources still referenced by projects or bundles are preserved
+# by database constraints.
+dev-prune-resources:
+	./scripts/platform.sh exec backend python -m app.cli resource-clean
+
+# Full CI bootstrap (init, build, start, seed all).
+ci:
+	./scripts/init-config.sh
+	./scripts/platform.sh run ./scripts/bootstrap.sh
+	./scripts/platform.sh run ./scripts/seed-institution.sh
+	./scripts/platform.sh run ./scripts/seed-personas.sh
+	./scripts/platform.sh run ./scripts/seed-developer.sh
+	@echo "EPIBRIDGE_TARGET=native" > .epibridge-context
+
+# Destroy all CI resources (volumes + .env).
+ci-clean:
+	./scripts/platform.sh compose down -v
+	rm -f .env
 
 # Run the complete platform test suite.
-#
-# Unit tests execute natively for speed.
-# Integration and smoke tests execute through the current execution
-# backend so they always target the active platform.
 test:
 	@failed=0; \
 	echo "=== Running unit tests ==="; \
@@ -340,21 +345,7 @@ test:
 	echo ""; \
 	if [ $$failed -eq 0 ]; then echo "=== All tests passed ==="; else echo "=== Some tests failed ==="; exit 1; fi
 
-format:
-	cd backend && $(PYTHON) -m ruff format
-
-lint:
-	cd backend && $(PYTHON) -m ruff check
-
-fix:
-	cd backend && $(PYTHON) -m ruff check --fix
-	cd backend && $(PYTHON) -m ruff format
-
-# --- Acceptance testing (requires full stack) --------------------------------
-
-# Acceptance testing (requires full stack).
-# The base URL resolves using the standard hierarchy:
-#   PLAYWRIGHT_BASE_URL env var > EPIBRIDGE_REACHABLE_URL > PUBLIC_URL > https://localhost
+# Run acceptance tests (requires full stack).
 playwright:
 	@BASE=$${PLAYWRIGHT_BASE_URL:-$$(sed -n 's/^EPIBRIDGE_REACHABLE_URL=//p' .epibridge-context 2>/dev/null || true)}; \
 	if [ -z "$$BASE" ] && [ -f .env ]; then \
@@ -363,17 +354,36 @@ playwright:
 	export ADMIN_PASSWORD=$$(grep ^ADMIN_PASSWORD= .env | cut -d= -f2-); \
 	cd frontend && PLAYWRIGHT_BASE_URL="$${BASE:-https://localhost}" npx playwright test
 
-# --- Maintenance -------------------------------------------------------------
+# Auto-format Python code.
+format:
+	cd backend && $(PYTHON) -m ruff format
 
-clean-db:
+# Static analysis.
+lint:
+	cd backend && $(PYTHON) -m ruff check
+
+# Auto-fix then format.
+fix:
+	cd backend && $(PYTHON) -m ruff check --fix
+	cd backend && $(PYTHON) -m ruff format
+
+# --- Development (destructive) ----------------------------------------------------
+# Commands that destroy platform state.  Never run on a commissioned installation.
+
+# DANGER: Drops ALL database tables.  All users, projects, bundles, audit events,
+# terms, and governance records are permanently lost.
+# This is a development utility only — never run on a commissioned installation.
+dev-drop-db:
+	@echo ""
+	@echo " DANGER: This will destroy ALL data in the database."
+	@echo " Users, projects, bundles, audit events, terms, and"
+	@echo " governance records will be permanently lost."
+	@echo ""
+	@read -p " Continue? [y/N] " confirm; \
+	if [ "$$confirm" != "y" ]; then echo "Aborted."; exit 1; fi
 	./scripts/platform.sh compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || \
 		(./scripts/platform.sh compose up -d postgres && sleep 3 && \
 		 ./scripts/platform.sh compose exec -T postgres psql -U epibridge -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
 	./scripts/platform.sh restart backend
+	@echo ""
 	@echo "=== Database reset (all tables recreated on startup) ==="
-
-# --- Internal targets ---------------------------------------------------------
-
-dev-destroy:
-	./scripts/platform.sh compose down
-	@echo "=== Development containers stopped ==="

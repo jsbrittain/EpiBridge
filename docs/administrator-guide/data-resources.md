@@ -15,7 +15,7 @@ and governance**, not the data itself.
 ```
 1. Provision your data     →  institution's infrastructure, outside EpiBridge
 2. Mount at /read-only-data →  NFS, local disk, S3 FUSE — your choice
-3. Register with EpiBridge  →  make new-resource + make register-resources
+3. Register with EpiBridge  →  make new-data-resource + make register-resources
 4. Publish terms           →  admin UI (dataset terms)
 ```
 
@@ -37,7 +37,7 @@ Scaffold the resource skeleton, place data files, and register:
 
 ```bash
 # Create the resource directory and template files
-make new-resource ID=uk-biobank-serum NAME="UK Biobank Serum Biomarkers" PROVIDER=csv
+make new-data-resource ID=uk-biobank-serum NAME="UK Biobank Serum Biomarkers" PROVIDER=csv
 
 # Place data files
 cp /path/to/serum.csv resources/uk-biobank-serum/data/
@@ -70,7 +70,7 @@ for use.
 Once registered, the resource appears in the researcher catalogue and can be
 attached to projects.
 
-> **Developer cleanup:** `make clean-resources` removes registered resources
+> **Developer cleanup:** `make dev-prune-resources` removes registered resources
 > whose manifest directory no longer exists on disk. Resources still referenced
 > by projects or bundles are preserved by database constraints. This is a
 > developer utility only — it never runs automatically.

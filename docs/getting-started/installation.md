@@ -85,7 +85,7 @@ grep ADMIN_PASSWORD .env
 For evaluation environments, you can create additional accounts:
 
 ```bash
-make demo
+make seed-demo
 ```
 
 This creates three evaluation persona accounts (researcher, moderator, maintainer) and prints their credentials. See the [Quick Start](quick-start.md) for the guided tutorial.
