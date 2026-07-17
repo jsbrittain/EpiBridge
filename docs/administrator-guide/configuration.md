@@ -97,9 +97,10 @@ Logs are written to stderr in a structured format with UTC timestamps. Module lo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AI_ASSIST_ENABLED` | `false` | Enable AI-assisted analysis summaries |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | URL of the Ollama API endpoint |
 | `OLLAMA_MODEL` | `llama3.2` | AI model to use for analysis summaries |
+
+AI-assisted review is controlled through the admin settings page (Admin → Settings → Enable AI-assisted bundle review), not by an environment variable.
 
 The Ollama service runs behind a Docker Compose profile and must be started separately:
 
